@@ -6,17 +6,11 @@ namespace CheckersGame.Class;
 
 public class GameController
 {
-    private Dictionary<IPlayer, List<Piece>> _playerPieces;
+    private Dictionary<IPlayer, List<Piece>> _playerPieces = new();
     private IBoard<Piece?[,]> _board = null!;
     private GameStatus _status;
-    private IPlayer _currentPlayer;
-    
-    public GameController()
-    {
-        _currentPlayer = new Player(0, "dummy");
-        _playerPieces = new Dictionary<IPlayer, List<Piece>>();
-    }
-    
+    private IPlayer _currentPlayer = new Player(0, "dummy");
+
     #region Get-Set Player
     private bool IsPlayerValid(IPlayer player)
     {
@@ -223,7 +217,7 @@ public class GameController
     }
     public IEnumerable<Position> GetPossibleStandardMoves(Piece piece)
     {
-        List<Position> possibleStandarMoves = new List<Position>();
+        List<Position> possibleStandardMoves = new List<Position>();
 
         Position? piecePos = GetPosition(piece);
         if (piecePos == null)
@@ -248,11 +242,11 @@ public class GameController
                 int toColumn = piecePos.Column + column;
                 if (CanMove(toRow, toColumn))
                 {
-                    possibleStandarMoves.Add(new Position(toRow, toColumn));
+                    possibleStandardMoves.Add(new Position(toRow, toColumn));
                 }
             }
         }
-        return possibleStandarMoves;
+        return possibleStandardMoves;
     }
     public IEnumerable<Position> GetPossibleJumpMoves(Piece piece)
     {
@@ -320,9 +314,10 @@ public class GameController
 
         return MovePiece(piece, target);
     }
-    public bool MovePiece(Piece piece, Position target)
+
+    public bool MovePiece(Piece piece, Position target, bool firstMove = true)
     {
-        if (!IsNewPositionValid(piece,target))
+        if (!IsNewPositionValid(piece, target, firstMove))
             return false;
         
         Position? source = GetPosition(piece);
@@ -351,9 +346,10 @@ public class GameController
         PromotePieceFromPlayers(piece);
         return true;
     }
-    private bool IsNewPositionValid(Piece piece, Position target)
+    private bool IsNewPositionValid(Piece piece, Position target, bool firstMove = true)
     {
-        IEnumerable<Position> possibleMoves = GetPossibleMoves(piece);
+        IEnumerable<Position> possibleMoves = firstMove ? GetPossibleMoves(piece) : GetPossibleJumpMoves(piece);
+        
         foreach (var position in possibleMoves)
         {
             if (position.Row == target.Row && position.Column == target.Column)

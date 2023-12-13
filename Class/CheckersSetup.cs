@@ -1,6 +1,4 @@
-﻿using System.ComponentModel.Design;
-using System.Diagnostics;
-using CheckersGame.Interface;
+﻿using System.Diagnostics;
 using System.Text;
 using CheckersGame.Enumeration;
 
@@ -8,7 +6,7 @@ namespace CheckersGame.Class;
 
 public static class CheckersSetup
 {
-    private static int _displayLevel = 0;
+    private static int _displayLevel;
         
     public static void Show(GameController checkers)
     {
@@ -57,7 +55,7 @@ public static class CheckersSetup
             "Exit"
         };
         
-        int selectedOption = SelectionMenu<string>(menuOptions);
+        int selectedOption = SelectionMenu(menuOptions);
         if (selectedOption == 0)
         {
             _displayLevel = 1;
@@ -83,7 +81,7 @@ public static class CheckersSetup
             12
         };
 
-        int selectedOption = SelectionMenu<int>(menuOptions);
+        int selectedOption = SelectionMenu(menuOptions);
         CheckersBoard board = new CheckersBoard(menuOptions[selectedOption]);
         if (checkers.SetBoard(board))
             _displayLevel = 2;
@@ -145,15 +143,8 @@ public static class CheckersSetup
             "No"
         };
 
-        int selectedOption = SelectionMenu<string>(menuOptions);
-        if (selectedOption == 0)
-        {
-            _displayLevel = 7;
-        }
-        else
-        {
-            _displayLevel = 6;
-        }
+        int selectedOption = SelectionMenu(menuOptions);
+        _displayLevel = (selectedOption == 0) ? 7 : 6;
     }
     private static void ResetSetup(GameController checkers)
     {

@@ -6,7 +6,7 @@ using CheckersGame.Interface;
 
 namespace CheckersGame;
 
-class Program
+static class Program
 {
     static void Main()
     {
@@ -18,6 +18,7 @@ class Program
 
         Piece? selectedPiece = null;
         int lastPieceCount = checkers.CountPieceOnBoard();
+        bool firstMove = true;
         while (started && !checkers.GameOver())
         {
             Console.Clear();
@@ -25,7 +26,7 @@ class Program
             IPlayer secondPlayer = checkers.GetActivePlayer().Last();
             
             PrintPlayerInfo(firstPlayer, checkers.GetPlayerPieces(firstPlayer).Count());
-            PrintBoard(checkers, selectedPiece);
+            PrintBoard(checkers, selectedPiece, firstMove);
             PrintPlayerInfo(secondPlayer, checkers.GetPlayerPieces(secondPlayer).Count());
             PrintCurrentPlayerInfo(checkers.GetCurrentPlayer());
 
@@ -34,7 +35,7 @@ class Program
                 selectedPiece = SelectPiece(checkers);
                 Console.Clear();
                 PrintPlayerInfo(firstPlayer, checkers.GetPlayerPieces(firstPlayer).Count());
-                PrintBoard(checkers, selectedPiece);
+                PrintBoard(checkers, selectedPiece, firstMove);
                 PrintPlayerInfo(secondPlayer, checkers.GetPlayerPieces(secondPlayer).Count());
                 PrintCurrentPlayerInfo(checkers.GetCurrentPlayer());   
             }
@@ -47,7 +48,7 @@ class Program
             {
                 Position newPosition = SelectPosition(checkers);
                 
-                if (!checkers.MovePiece(selectedPiece, newPosition))
+                if (!checkers.MovePiece(selectedPiece, newPosition, firstMove))
                     Console.WriteLine("\u001b[31mInvalid move!\u001b[0m");
                 else
                     break;
@@ -60,7 +61,12 @@ class Program
                 checkers.PromotePiece(selectedPiece);
                 lastPieceCount = currentPieceCount;
                 selectedPiece = null;
+                firstMove = true;
                 checkers.NextTurn();   
+            }
+            else
+            {
+                firstMove = false;
             }
         }
         PrintWinner(checkers);
@@ -85,7 +91,10 @@ class Program
             Console.CursorVisible = false;
             
             selectedPiece = checkers.GetPiece(currentPlayer, pieceId);
-            if (checkers.GetPossibleMoves(selectedPiece!).Count() == 0)
+            if (selectedPiece == null)
+                continue;
+            
+            if (!checkers.GetPossibleMoves(selectedPiece).Any())
             {
                 Console.WriteLine("\u001b[31mPiece can't be moved, please select other piece!\u001b[0m");
                 selectedPiece = null;
@@ -126,7 +135,7 @@ class Program
         Console.WriteLine("==========================================================");
         Console.ResetColor();
     }
-    static void PrintBoard(GameController checkers, Piece? selectedPiece)
+    static void PrintBoard(GameController checkers, Piece? selectedPiece, bool firstMove)
     {
         Piece?[,] board = checkers.GetBoardLayout();
         
@@ -151,7 +160,8 @@ class Program
                 {
                     if (selectedPiece != null)
                     {
-                        foreach (var position in checkers.GetPossibleMoves(selectedPiece))
+                        IEnumerable<Position> validMovePositions = firstMove ? checkers.GetPossibleMoves(selectedPiece) : checkers.GetPossibleJumpMoves(selectedPiece);
+                        foreach (var position in validMovePositions)
                         {
                             if (position.Row != i || position.Column != j)
                                 continue;
@@ -174,10 +184,7 @@ class Program
     static void PrintWinner(GameController checkers)
     {
         IPlayer? winner = checkers.GetWinner();
-        if (winner == null)
-            Console.WriteLine("END RESULT: DRAW");
-        else
-            Console.WriteLine($"GAME WINNER: {winner}");
+        Console.WriteLine(winner == null ? "END RESULT: DRAW" : $"GAME WINNER: {winner}");
     }
     static string GenerateColumnSeparator(int size)
     {
