@@ -114,7 +114,7 @@ public static class CheckersSetup
     {
         foreach (var player in checkers.GetActivePlayer())
         {
-            int pieceQty = checkers.GetBoardSize() * (checkers.GetBoardSize() - 2) / 4 + (checkers.GetBoardSize() % 2);
+            int pieceQty = checkers.MaxPlayerPieces();
             PieceColor color = (player.Id == 1) ? PieceColor.Blue : PieceColor.Red;
             
             List<Piece> newPiece = (List<Piece>) checkers.GeneratePieces(color, pieceQty);

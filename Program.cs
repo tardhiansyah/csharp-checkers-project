@@ -15,84 +15,127 @@ class Program
         CheckersSetup.Show(checkers);
 
         bool started = checkers.Start();
+
+        Piece? selectedPiece = null;
+        int lastPieceCount = checkers.CountPieceOnBoard();
         while (started && !checkers.GameOver())
         {
             Console.Clear();
-            PrintPlayerInfo(checkers.GetActivePlayer().First());
-            PrintBoard(checkers);
-            PrintPlayerInfo(checkers.GetActivePlayer().Last());
+            IPlayer firstPlayer = checkers.GetActivePlayer().First();
+            IPlayer secondPlayer = checkers.GetActivePlayer().Last();
             
-            AskPlayerToMovePiece(checkers);
-            checkers.NextTurn();
+            PrintPlayerInfo(firstPlayer, checkers.GetPlayerPieces(firstPlayer).Count());
+            PrintBoard(checkers, selectedPiece);
+            PrintPlayerInfo(secondPlayer, checkers.GetPlayerPieces(secondPlayer).Count());
+            PrintCurrentPlayerInfo(checkers.GetCurrentPlayer());
+
+            if (selectedPiece == null)
+            {
+                selectedPiece = SelectPiece(checkers);
+                Console.Clear();
+                PrintPlayerInfo(firstPlayer, checkers.GetPlayerPieces(firstPlayer).Count());
+                PrintBoard(checkers, selectedPiece);
+                PrintPlayerInfo(secondPlayer, checkers.GetPlayerPieces(secondPlayer).Count());
+                PrintCurrentPlayerInfo(checkers.GetCurrentPlayer());   
+            }
+            
+            Console.ForegroundColor = (checkers.GetCurrentPlayer().Id == 1) ? ConsoleColor.Blue : ConsoleColor.Red;
+            Console.WriteLine($"\u001b[32mPIECE SELECTED: {selectedPiece.Id}-{selectedPiece.Status}\u001b[0m");
+            Console.ResetColor();
+            
+            while (true)
+            {
+                Position newPosition = SelectPosition(checkers);
+                
+                if (!checkers.MovePiece(selectedPiece, newPosition))
+                    Console.WriteLine("\u001b[31mInvalid move!\u001b[0m");
+                else
+                    break;
+            }
+            
+            // Check if jump / kill move
+            int currentPieceCount = checkers.CountPieceOnBoard();
+            if (currentPieceCount == lastPieceCount || !checkers.GetPossibleJumpMoves(selectedPiece).Any())
+            {
+                checkers.PromotePiece(selectedPiece);
+                lastPieceCount = currentPieceCount;
+                selectedPiece = null;
+                checkers.NextTurn();   
+            }
         }
+        PrintWinner(checkers);
     }
 
-    static void AskPlayerToMovePiece(GameController checkers)
+    static Piece SelectPiece(GameController checkers)
     {
         IPlayer currentPlayer = checkers.GetCurrentPlayer();
-        Console.WriteLine($"Player {currentPlayer.Id} Turn!");
         
         Piece? selectedPiece = null;
         while (selectedPiece == null)
         {
-            Console.Write("Choose Piece To Move \u001b[36m(e.g: 2)\u001b[0m: ");
-            int selectedPieceId = GetPieceIdInput();
-        
-            selectedPiece = checkers.GetPiece(currentPlayer, selectedPieceId);
-            if (checkers.GetPossibleMoves(selectedPiece).Count() == 0)
-            {
-                Console.WriteLine("\u001b[31mPiece can't be moved, please select other piece!\u001b[0m");
-                selectedPiece = null;   
-            }
-        }
-        Console.WriteLine($"Piece Selected: {selectedPiece.Id}-{selectedPiece.Status}");
-        
-
-        int lastNumberPieceOnBoard = checkers.CountPieceOnBoard();
-        while (true)
-        {
-            Console.Write("Select new position \u001b[36m(e.g: D5 or d5)\u001b[0m: ");
-            string selectedPosition = GetPositionInput();
-            Position? newPosition = ConvertInputToPosition(selectedPosition, checkers.GetBoardSize());
-            if (newPosition == null)
+            Console.Write("\u001b[33m* Choose Piece To Move (e.g: 2): ");
+            string pieceNumber = GetUserInput();
+            if (!Int32.TryParse(pieceNumber, out int pieceId))
                 continue;
 
-            if (!checkers.MovePiece(selectedPiece, newPosition))
+            if (pieceId > checkers.MaxPlayerPieces())
+                continue;
+            
+            Console.ResetColor();
+            Console.CursorVisible = false;
+            
+            selectedPiece = checkers.GetPiece(currentPlayer, pieceId);
+            if (checkers.GetPossibleMoves(selectedPiece!).Count() == 0)
             {
-                Console.WriteLine("\u001b[31mInvalid move!\u001b[0m");
-                continue;   
+                Console.WriteLine("\u001b[31mPiece can't be moved, please select other piece!\u001b[0m");
+                selectedPiece = null;
             }
-            
-            // Is it jump / kill move?
-            int currentNumberPieceOnBoard = checkers.CountPieceOnBoard();
-            if (currentNumberPieceOnBoard == lastNumberPieceOnBoard)
-                break;
-            
-            // If it is jump move, check if can move again
-            if (!checkers.GetPossibleJumpMoves(selectedPiece).Any())
-                break;
+        }
+        return selectedPiece;
+    }
+    static Position SelectPosition(GameController checkers)
+    {
+        while (true)
+        {
+            Console.Write("\u001b[33m* Select new position (e.g: D5 or d5): ");
+            string selectedPosition = GetUserInput();
+            Console.ResetColor();
+            Position? newPosition = ConvertInputToPosition(selectedPosition, checkers.GetBoardSize());
+            if (newPosition != null)
+            {
+                Console.CursorVisible = false;
+                return newPosition;
+            }
         }
     }
-
-    static void PrintPlayerInfo(IPlayer player)
+    static void PrintCurrentPlayerInfo(IPlayer player)
+    {
+        Console.ForegroundColor = (player.Id == 1) ? ConsoleColor.Blue : ConsoleColor.Red;
+        Console.WriteLine($"PLAYER {player.Id} TURN!");
+        Console.ResetColor();
+    }
+    static void PrintPlayerInfo(IPlayer player, int remainingPieces)
     {
         PieceColor color = (player.Id == 1) ? PieceColor.Blue : PieceColor.Red;
         
-        Console.WriteLine();
-        Console.WriteLine($"======================= PLAYER {player.Id} =======================");
+        Console.ForegroundColor = (player.Id == 1) ? ConsoleColor.Blue : ConsoleColor.Red;
+        Console.WriteLine($"======================== PLAYER {player.Id} ========================");
         Console.WriteLine($"NICKNAME: {player.Name.ToUpper()}");
         Console.WriteLine($"PIECE COLOR: {color.ToString().ToUpper()}");
-        Console.WriteLine("========================================================");
-        Console.WriteLine();
+        Console.WriteLine($"PIECE REMAINING: {remainingPieces} Pieces");
+        Console.WriteLine("==========================================================");
+        Console.ResetColor();
     }
-    static void PrintBoard(GameController checkers)
+    static void PrintBoard(GameController checkers, Piece? selectedPiece)
     {
         Piece?[,] board = checkers.GetBoardLayout();
         
         for (int i = 0; i < board.GetLength(0); i++)
         {
+            Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine(GenerateColumnSeparator(checkers.GetBoardSize()));
-            Console.Write($"{board.GetLength(0) - i}");
+            Console.Write($"{board.GetLength(0) - i:D2}");
+            Console.ResetColor();
             
             for (int j = 0; j < board.GetLength(1); j++)
             {
@@ -104,14 +147,37 @@ class Program
                     symbol = $"{type}{piece.Id:D2}";
                     Console.ForegroundColor = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
                 }
+                else
+                {
+                    if (selectedPiece != null)
+                    {
+                        foreach (var position in checkers.GetPossibleMoves(selectedPiece))
+                        {
+                            if (position.Row != i || position.Column != j)
+                                continue;
+                            Console.ForegroundColor = ConsoleColor.Yellow;
+                            symbol = $" X ";
+                        }
+                    }
+                }
                 
                 Console.Write($"| {symbol} |");
                 Console.ResetColor();
             }
             Console.WriteLine();
         }
+        Console.ForegroundColor = ConsoleColor.Yellow;
         Console.WriteLine(GenerateColumnSeparator(checkers.GetBoardSize()));
         Console.WriteLine(GenerateRankName(checkers.GetBoardSize()));
+        Console.ResetColor();
+    }
+    static void PrintWinner(GameController checkers)
+    {
+        IPlayer? winner = checkers.GetWinner();
+        if (winner == null)
+            Console.WriteLine("END RESULT: DRAW");
+        else
+            Console.WriteLine($"GAME WINNER: {winner}");
     }
     static string GenerateColumnSeparator(int size)
     {
@@ -122,14 +188,14 @@ class Program
             sb.Append("-------");
         }
 
-        sb.Append("-");
+        sb.Append("--");
         
         return sb.ToString();
     }
     static string GenerateRankName(int size)
     {
         StringBuilder sb = new();
-        
+        sb.Append("  ");
         for (int i = 0; i < size; i++)
         {
             sb.Append($"   {(RankName) i}   ");
@@ -137,22 +203,7 @@ class Program
 
         return sb.ToString();
     }
-    static int GetPieceIdInput()
-    {
-        Console.CursorVisible = true;
-        while (true)
-        {
-            string? pieceID = Console.ReadLine();
-            if (pieceID == null)
-                continue;
-            if (Int32.TryParse(pieceID, out int id))
-            {
-                Console.CursorVisible = false;
-                return id;
-            }
-        }
-    }
-    static string GetPositionInput()
+    static string GetUserInput()
     {
         Console.CursorVisible = true;
         while (true)
@@ -178,7 +229,6 @@ class Program
 
         int column = (int)rank;
         int row = boardSize - int.Parse(match.Groups[2].Value);
-        Console.WriteLine($"New Position: {row} {column}");
 
         return new Position(row, column);
     }

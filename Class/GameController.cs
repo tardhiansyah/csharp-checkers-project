@@ -146,7 +146,6 @@ public class GameController
         }
         return Enumerable.Empty<Piece>();
     }
-
     public int CountPieceOnBoard()
     {
         int count = 0;
@@ -160,6 +159,10 @@ public class GameController
             }
         }
         return count;
+    }
+    public int MaxPlayerPieces()
+    {
+        return GetBoardSize() * (GetBoardSize() - 2) / 4 + (GetBoardSize() % 2);
     }
     #endregion
     
@@ -193,7 +196,6 @@ public class GameController
     {
         return _board.Layout[row, column];
     }
-
     public Piece? GetPiece(IPlayer player, int id)
     {
         Piece? selectedPiece = null;
@@ -440,17 +442,22 @@ public class GameController
     }
     public bool GameOver()
     {
-        if (GetWinner() == null)
-            return false;
-
-        SetGameStatus(GameStatus.GameOver);
-        return true;
+        foreach (IPlayer player in _playerPieces.Keys)
+        {
+            if (_playerPieces[player].Count == 0)
+            {
+                SetGameStatus(GameStatus.GameOver);
+                break;
+            }
+        }
+        
+        return (_status == GameStatus.GameOver);
     }
     public IPlayer? GetWinner()
     {
         foreach (IPlayer player in _playerPieces.Keys)
         {
-            if (_playerPieces[player].Count != 0)
+            if (_playerPieces[player].Count == 0)
                 continue;
 
             return player;
@@ -475,6 +482,7 @@ public class GameController
         if (!IsPlayerValid(player))
             return false;
         
+        _playerPieces[player].Clear();
         return true;
     }
     #endregion
