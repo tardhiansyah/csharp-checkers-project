@@ -12,4 +12,9 @@ public class Position
     }
     
     public Position() {}
+
+    public override string ToString()
+    {
+        return $"({Row}, {Column})";
+    }
 }

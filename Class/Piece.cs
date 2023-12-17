@@ -14,4 +14,18 @@ public class Piece
         Color = color;
         Id = id;
     }
+
+    public override bool Equals(object? obj)
+    {
+        if (obj == null || GetType() != obj.GetType())
+            return false;
+
+        Piece other = (Piece)obj;
+        return (Id == other.Id) && (Color == other.Color);
+    }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(Id, (int)Color);
+    }
 }

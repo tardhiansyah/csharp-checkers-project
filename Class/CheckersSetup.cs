@@ -151,7 +151,6 @@ public static class CheckersSetup
         checkers.RemoveAllPlayers();
         _displayLevel = 0;
     }
-    
     private static string GetUserName()
     {
         Console.CursorVisible = true;
