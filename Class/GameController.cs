@@ -22,23 +22,48 @@ public class GameController
     public event Action<IPlayer>? PlayerAdded;
     public event Action<IPlayer>? PlayerTurnChanged;
     public event Action<GameStatus>? StatusChanged;
-
+    
+    /// <summary>
+    /// Action to be invoked when game status changed.
+    /// </summary>
+    /// <param name="status">New game status.</param>
     protected virtual void OnChangeStatus(GameStatus status)
     {
         StatusChanged?.Invoke(status);
     }
+    
+    /// <summary>
+    /// Action to be invoked when turn changed.
+    /// </summary>
+    /// <param name="player">player turn</param>
     protected virtual void OnChangeTurnPlayer(IPlayer player)
     {
         PlayerTurnChanged?.Invoke(player);
     }
+    
+    /// <summary>
+    /// Action to be invoked when there are new player added.
+    /// </summary>
+    /// <param name="player">New player added.</param>
     protected virtual void OnAddPlayer(IPlayer player)
     {
         PlayerAdded?.Invoke(player);
     }
+    
+    /// <summary>
+    /// Action to be invoked when there are piece moved.
+    /// </summary>
+    /// <param name="piece">Piece moved.</param>
+    /// <param name="position">New piece position.</param>
     protected virtual void OnMovePiece(Piece piece, Position position)
     {
         PieceMoved?.Invoke(piece, position);
     }
+    
+    /// <summary>
+    /// Action to be invoked when there are piece captured.
+    /// </summary>
+    /// <param name="piece">Piece captured.</param>
     protected virtual void OnCapturePiece(Piece piece)
     {
         PieceCaptured?.Invoke(piece);
