@@ -9,18 +9,39 @@ public class GameController
     private IBoard<Piece?[,]> _board = null!;
     private GameStatus _status;
     private IPlayer? _currentPlayer;
-
     
+    /// <summary>
+    /// Create new checkers game instance (manual setup). Manually assign board, players, and pieces later.
+    /// </summary>
     public GameController()
     {
         _playerPieces = new();
         _currentPlayer = null;
     }
 
+    /// <summary>
+    /// Create new checkers game instance (simple setup).
+    /// </summary>
+    /// <param name="board">Checkers board.</param>
+    /// <param name="players">The players.</param>
+    public GameController(IBoard<Piece?[,]> board, params IPlayer[] players)
+    {
+        _board = board;
+        _playerPieces = new Dictionary<IPlayer, List<Piece>>();
+        
+        foreach (var player in players)
+        {
+            _playerPieces.Add(player, new List<Piece>());
+        }
+
+        SetPlayerPieces(_playerPieces.Keys.First(), (List<Piece>)GeneratePieces(PieceColor.Blue, MaxPlayerPieces()));
+        SetPlayerPieces(_playerPieces.Keys.Last(), (List<Piece>)GeneratePieces(PieceColor.Red, MaxPlayerPieces()));
+    }
     
     #region Action / Delegate
     public event Action<Piece>? PieceCaptured;
     public event Action<Piece, Position>? PieceMoved;
+    public event Action<Piece>? PiecePromoted;
     public event Action<IPlayer>? PlayerAdded;
     public event Action<IPlayer>? PlayerTurnChanged;
     public event Action<GameStatus>? StatusChanged;
@@ -70,8 +91,16 @@ public class GameController
     {
         PieceCaptured?.Invoke(piece);
     }
-    #endregion
     
+    /// <summary>
+    /// Action to be invoked when there are piece promoted to <see cref="PieceStatus.King"/>.
+    /// </summary>
+    /// <param name="piece">Piece promoted</param>
+    protected virtual void OnPromotePiece(Piece piece)
+    {
+        PiecePromoted?.Invoke(piece);
+    }
+    #endregion
     
     #region Get-Set Player
     /// <summary>
@@ -183,7 +212,6 @@ public class GameController
     }
     #endregion
     
-    
     #region Get-Set Pieces & Board
     /// <summary>
     /// Generate new checkers pieces.
@@ -193,17 +221,7 @@ public class GameController
     /// <returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Piece"/>.</returns>
     public IEnumerable<Piece> GeneratePieces(PieceColor color, int quantity = 12)
     {
-        List<Piece> pieces = new List<Piece>();
-        
-        int count = 0;
-        for (int i = 0; i < quantity; i++)
-        {
-            Piece piece = new Piece(count + 1, color);
-            pieces.Add(piece);
-            count++;
-        }
-        
-        return pieces;
+        return Enumerable.Range(1, quantity).Select(count => new Piece(count, color)).ToList();
     }
     
     /// <summary>
@@ -249,12 +267,8 @@ public class GameController
     {
         if (_status != GameStatus.NotReady || _playerPieces.Count == 0)
             return false;
-
-        foreach (IPlayer player in _playerPieces.Keys)
-        {
-            SetPieceToBoard(player);
-        }
-
+        
+        _playerPieces.Keys.ToList().ForEach(player => SetPieceToBoard(player));
         return true;
     }
     
@@ -330,21 +344,20 @@ public class GameController
     }
     
     /// <summary>
-    /// Get player's active pieces.
+    /// Get selected player's active pieces.
     /// </summary>
     /// <param name="player">The player.</param>
     /// <returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Piece"/> if player is found; otherwise empty.</returns>
     public IEnumerable<Piece> GetPieces(IPlayer player)
     {
         if (_playerPieces.TryGetValue(player, out List<Piece>? playerPieces))
-        {
             return playerPieces;
-        }
+        
         return Enumerable.Empty<Piece>();
     }
     
     /// <summary>
-    /// Select piece from player based on the piece's ID number.
+    /// Get piece from player <see cref="List{T}"/> of <see cref="Piece"/> based on the piece's ID number.
     /// </summary>
     /// <param name="player">The player.</param>
     /// <param name="id">ID of the piece.</param>
@@ -357,7 +370,7 @@ public class GameController
     }
     
     /// <summary>
-    /// Select piece from player based on their <see cref="Position"/> on the board.
+    /// Get piece from board based on their <see cref="Position"/> on the board.
     /// </summary>
     /// <param name="position">Piece's position on the board.</param>
     /// <returns>Return the piece if the piece is on the board; otherwise null.</returns>
@@ -367,7 +380,7 @@ public class GameController
     }
     
     /// <summary>
-    /// Select piece from player based on their coordinate (Y,X) on the board.
+    /// Select piece from board based on their coordinate (Y,X) on the board.
     /// </summary>
     /// <param name="row">Row (Y Coordinate).</param>
     /// <param name="column">Column (X Coordinate).</param>
@@ -378,7 +391,7 @@ public class GameController
     }
     
     /// <summary>
-    /// Remove piece from player and board based on the piece's ID number.
+    /// Remove piece from player <see cref="List{T}"/> of <see cref="Piece"/> and board based on the piece's ID number.
     /// </summary>
     /// <param name="player">The player.</param>
     /// <param name="id">ID of the piece.</param>
@@ -393,11 +406,11 @@ public class GameController
         if (position == null)
             return false;
         
-        return RemovePiece(position.Row, position.Column);
+        return RemovePieceFromBoard(position.Row, position.Column) && RemovePieceFromPlayer(piece);
     }
     
     /// <summary>
-    /// Remove piece from player and board based on their position on the board.
+    /// Remove piece from player <see cref="List{T}"/> of <see cref="Piece"/> and board based on their position on the board.
     /// </summary>
     /// <param name="position">Position of piece that will be removed.</param>
     /// <returns>Return <c>true</c> if piece successfully removed; otherwise, <c>false</c>.</returns>
@@ -407,7 +420,7 @@ public class GameController
     }
     
     /// <summary>
-    /// Remove piece from player and board based on their coordinate on the board.
+    /// Remove piece from player <see cref="List{T}"/> of <see cref="Piece"/> and board based on their coordinate on the board.
     /// </summary>
     /// <param name="row">Row (Y Coordinate) of piece that will be removed</param>
     /// <param name="column">Column (X Coordinate) of piece that will be removed</param>
@@ -419,6 +432,45 @@ public class GameController
             return false;
         
         return RemovePieceFromBoard(row, column) && RemovePieceFromPlayer(piece);
+    }
+    
+    /// <summary>
+    /// Remove piece from player based on their <see cref="Position"/> on the board.
+    /// </summary>
+    /// <param name="position">Piece's position on the board.</param>
+    /// <returns>Return <c>true</c> if successfully remove piece from board; otherwise, <c>false</c>.</returns>
+    private bool RemovePieceFromBoard(Position position)
+    {
+        return RemovePieceFromBoard(position.Row, position.Column);
+    }
+    
+    /// <summary>
+    /// Remove piece from player based on their coordinate (Y,X) on the board.
+    /// </summary>
+    /// <param name="row">Row (Y Coordinate).</param>
+    /// <param name="column">Column (X Coordinate).</param>
+    /// <returns>Return <c>true</c> if successfully remove piece from board; otherwise, <c>false</c>.</returns>
+    private bool RemovePieceFromBoard(int row, int column)
+    {
+        if (GetPiece(row, column) == null)
+            return false;
+        
+        _board.Layout[row, column] = null;
+        return true;
+    }
+    
+    /// <summary>
+    /// Remove piece from players <see cref="List{T}"/> of <see cref="Piece"/> .
+    /// </summary>
+    /// <param name="removedPiece">Piece that will be removed.</param>
+    /// <returns>Return <c>true</c> if piece successfully removed; otherwise, <c>false</c>.</returns>
+    private bool RemovePieceFromPlayer(Piece removedPiece)
+    {
+        IPlayer? matchingPlayer = _playerPieces.Keys.FirstOrDefault(player => _playerPieces[player].Any(piece => piece.Equals(removedPiece)));
+        if (matchingPlayer == null)
+            return false;
+
+        return _playerPieces[matchingPlayer].Remove(removedPiece);
     }
     
     /// <summary>
@@ -448,7 +500,6 @@ public class GameController
         return GetBoardSize() * (GetBoardSize() - 2) / 4 + (GetBoardSize() % 2);
     }
     #endregion
-    
     
     #region Check Valid Movement
     /// <summary>
@@ -481,66 +532,25 @@ public class GameController
     ///<returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Position"/> for all piece of the player.</returns>
     public IEnumerable<Position> GetPossibleMoves(IPlayer player)
     {
-        return _playerPieces[player].SelectMany(GetPossibleMoves);
-    }
-    
-    /// <summary>
-    /// Get all possible move from selected piece position (including standard move and jump move).
-    /// </summary>
-    /// <param name="piece">Selected piece that will be checked.</param>
-    /// <returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Position"/> for selected piece.</returns>
-    public IEnumerable<Position> GetPossibleMoves(Piece piece)
-    {
-        List<Position> possiblePieceMoves = new List<Position>();
-        possiblePieceMoves.AddRange(GetPossibleStandardMoves(piece));
-        possiblePieceMoves.AddRange(GetPossibleJumpMoves(piece));
-        return possiblePieceMoves;
-    }
-    
-    /// <summary>
-    /// Get all standard / single tile move from selected piece position.
-    /// </summary>
-    /// <param name="piece">Selected piece that will be checked</param>
-    /// <returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Position"/> for selected piece.</returns>
-    public IEnumerable<Position> GetPossibleStandardMoves(Piece piece)
-    {
-        List<Position> possibleStandardMoves = new List<Position>();
-
-        Position? piecePos = GetPosition(piece);
-        if (piecePos == null)
-            return Enumerable.Empty<Position>();
-
-        for (int row = -1; row <= 1; row++)
+        List<Position> possibleMove = new List<Position>();
+        
+        foreach (var piece in _playerPieces[player])
         {
-            for (int column = -1; column <= 1; column++)
-            {
-                if (row == 0 || column == 0)
-                    continue;
-
-                if (!CanMoveBackward(piece))
-                {
-                    int skippedRow = (piece.Color == PieceColor.Blue) ? -1 : 1;
-                    if (row == skippedRow)
-                        continue;
-                }
-                
-                int toRow = piecePos.Row + row;
-                int toColumn = piecePos.Column + column;
-                if (IsValidMove(toRow, toColumn))
-                    possibleStandardMoves.Add(new Position(toRow, toColumn));
-            }
+            possibleMove.AddRange(GetPossibleMoves(piece));
         }
-        return possibleStandardMoves;
+        
+        return possibleMove;
     }
-    
+
     /// <summary>
-    /// Get all possible jump / capture move from selected piece position.
+    /// Get all possible move of selected piece .
     /// </summary>
     /// <param name="piece">Selected piece that will be checked</param>
+    /// <param name="firstMove">when <c>true</c> all possible move will be checked; otherwise, when <c>false</c> only jump move will be checked</param>
     /// <returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Position"/> for selected piece.</returns>
-    public IEnumerable<Position> GetPossibleJumpMoves(Piece piece)
+    public IEnumerable<Position> GetPossibleMoves(Piece piece, bool firstMove = true)
     {
-        List<Position> possibleJumpMoves = new List<Position>();
+        List<Position> possibleMoves = new List<Position>();
 
         Position? piecePos = GetPosition(piece);
         if (piecePos == null)
@@ -560,23 +570,32 @@ public class GameController
                         continue;
                 }
                 
+                int targetRow = piecePos.Row + row;
+                int targetColumn = piecePos.Column + column;
+                if (!WithinBoundaries(targetRow, targetColumn))
+                    continue;
+                
+                // Check single tile moves
+                if (firstMove && IsValidMove(targetRow, targetColumn))
+                {
+                    possibleMoves.Add(new Position(targetRow, targetColumn));
+                    continue;
+                }
+                
+                // Check jump / capture moves
                 int jumpRow = piecePos.Row + 2 * row;
                 int jumpColumn = piecePos.Column + 2 * column;
                 if (!IsValidMove(jumpRow, jumpColumn))
                     continue;
                 
-                int enemyRow = piecePos.Row + row;
-                int enemyColumn = piecePos.Column + column;
-                Piece? enemyPiece = GetPiece(enemyRow, enemyColumn);
-                if (enemyPiece == null)
-                    continue;
-                if (enemyPiece.Color == piece.Color)
+                Piece? enemyPiece = GetPiece(targetRow, targetColumn);
+                if (enemyPiece == null || enemyPiece.Color == piece.Color)
                     continue;
                 
-                possibleJumpMoves.Add(new Position(jumpRow, jumpColumn));
+                possibleMoves.Add(new Position(jumpRow, jumpColumn));
             }
         }
-        return possibleJumpMoves;
+        return possibleMoves;
     }
     
     /// <summary>
@@ -614,7 +633,6 @@ public class GameController
         return (row >= 0 && row < GetBoardSize()) && (column >= 0 && column < GetBoardSize());
     }
     #endregion
-    
     
     #region Move & Promote Piece
     /// <summary>
@@ -672,7 +690,7 @@ public class GameController
     /// <returns>true if new position is possible to be moved on; otherwise, false.</returns>
     private bool ValidateNewPosition(Piece piece, Position target, in bool firstMove = true)
     {
-        IEnumerable<Position> possibleMoves = firstMove ? GetPossibleMoves(piece) : GetPossibleJumpMoves(piece);
+        IEnumerable<Position> possibleMoves = GetPossibleMoves(piece, firstMove);
         
         foreach (var position in possibleMoves)
         {
@@ -703,11 +721,8 @@ public class GameController
     /// <param name="target">Enemy new position.</param>
     private void CapturePieceInBetween(Position source, Position target)
     {
-        int deltaRow = target.Row - source.Row;
-        int deltaColumn = target.Column - source.Column;
-
-        int captureRow = source.Row + deltaRow / 2;
-        int captureColumn = source.Column + deltaColumn / 2;
+        int captureRow = (source.Row + target.Row) / 2;
+        int captureColumn = (source.Column + target.Column) / 2;
 
         Piece? capturedPiece = GetPiece(captureRow, captureColumn);
         if (capturedPiece == null)
@@ -715,45 +730,6 @@ public class GameController
         
         OnCapturePiece(capturedPiece);
         RemovePiece(captureRow, captureColumn);
-    }
-    
-    /// <summary>
-    /// Remove piece from player based on their <see cref="Position"/> on the board.
-    /// </summary>
-    /// <param name="position">Piece's position on the board.</param>
-    /// <returns>Return <c>true</c> if successfully remove piece from board; otherwise, <c>false</c>.</returns>
-    private bool RemovePieceFromBoard(Position position)
-    {
-        return RemovePieceFromBoard(position.Row, position.Column);
-    }
-    
-    /// <summary>
-    /// Remove piece from player based on their coordinate (Y,X) on the board.
-    /// </summary>
-    /// <param name="row">Row (Y Coordinate).</param>
-    /// <param name="column">Column (X Coordinate).</param>
-    /// <returns>Return <c>true</c> if successfully remove piece from board; otherwise, <c>false</c>.</returns>
-    private bool RemovePieceFromBoard(int row, int column)
-    {
-        if (GetPiece(row, column) == null)
-            return false;
-        
-        _board.Layout[row, column] = null;
-        return true;
-    }
-    
-    /// <summary>
-    /// Remove piece from players <see cref="List{T}"/> of <see cref="Piece"/> .
-    /// </summary>
-    /// <param name="removedPiece">Piece that will be removed.</param>
-    /// <returns>Return <c>true</c> if piece successfully removed; otherwise, <c>false</c>.</returns>
-    private bool RemovePieceFromPlayer(Piece removedPiece)
-    {
-        IPlayer? matchingPlayer = _playerPieces.Keys.FirstOrDefault(player => _playerPieces[player].Any(piece => piece.Equals(removedPiece)));
-        if (matchingPlayer == null)
-            return false;
-
-        return _playerPieces[matchingPlayer].Remove(removedPiece);
     }
     
     /// <summary>
@@ -791,10 +767,10 @@ public class GameController
             return false;
         
         matchingPiece.Status = PieceStatus.King;
+        OnPromotePiece(matchingPiece);
         return true;
     }
     #endregion
-    
     
     #region Game Status
     /// <summary>
@@ -880,7 +856,7 @@ public class GameController
     /// <summary>
     /// Change turn to the next player.
     /// </summary>
-    /// <returns>Returs <c>true</c> if successfully change player turn; otherwise, <c>false</c></returns>
+    /// <returns>Returns <c>true</c> if successfully change player turn; otherwise, <c>false</c></returns>
     public bool NextTurn()
     {
         if (_currentPlayer == null)

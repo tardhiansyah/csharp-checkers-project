@@ -16,6 +16,7 @@ static class Program
         GameController checkers = new();
         checkers.PieceCaptured += HandlePieceCaptured;
         checkers.PieceMoved += HandlePieceMoved;
+        checkers.PiecePromoted += HandlePiecePromoted;
         checkers.PlayerAdded += HandlePlayerAdded;
         
         SetupGame(checkers);
@@ -58,7 +59,7 @@ static class Program
             
             // Check if jump / kill move
             int currentPieceCount = checkers.CountPieceOnBoard();
-            if (currentPieceCount == lastPieceCount || !checkers.GetPossibleJumpMoves(selectedPiece).Any())
+            if (currentPieceCount == lastPieceCount || !checkers.GetPossibleMoves(selectedPiece, false).Any())
             {
                 checkers.PromotePiece(selectedPiece);
                 lastPieceCount = currentPieceCount;
@@ -195,7 +196,7 @@ static class Program
                 {
                     if (selectedPiece != null)
                     {
-                        IEnumerable<Position> validMovePositions = firstMove ? checkers.GetPossibleMoves(selectedPiece) : checkers.GetPossibleJumpMoves(selectedPiece);
+                        IEnumerable<Position> validMovePositions = checkers.GetPossibleMoves(selectedPiece, firstMove);
                         foreach (var position in validMovePositions)
                         {
                             if (position.Row != i || position.Column != j)
@@ -283,7 +284,14 @@ static class Program
         Console.ForegroundColor = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
         Console.WriteLine($"Piece {piece.Id} have been captured");
         Console.ResetColor();
-        Thread.Sleep(1000);
+        Thread.Sleep(500);
+    }
+    private static void HandlePiecePromoted(Piece piece)
+    {
+        Console.ForegroundColor = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
+        Console.WriteLine($"Piece {piece.Id} have been Promoted to {PieceStatus.King.ToString()}");
+        Console.ResetColor();
+        Thread.Sleep(500);
     }
     #endregion
 
