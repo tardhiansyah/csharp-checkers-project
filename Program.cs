@@ -8,8 +8,6 @@ namespace CheckersGame;
 
 static class Program
 {
-    private static int _displayLevel;
-
     #region Main
     static void Main()
     {
@@ -298,27 +296,28 @@ static class Program
     #region Setup Game
     public static void SetupGame(GameController checkers)
     {
+        int displayLevel = 0;
         while (true)
         {
-            switch (_displayLevel)
+            switch (displayLevel)
             {
                 case 0:
-                    MainMenu();
+                    MainMenu(out displayLevel);
                     break;
                 case 1:
-                    AddBoard(checkers);
+                    AddBoard(checkers, out displayLevel);
                     break;
                 case 2:
-                    AddPlayer(checkers);
+                    AddPlayer(checkers, out displayLevel);
                     break;
                 case 3:
-                    AddPiece(checkers);
+                    AddPiece(checkers, out displayLevel);
                     break;
                 case 4:
-                    FinalizeSetup(checkers);
+                    FinalizeSetup(checkers, out displayLevel);
                     break;
                 case 6:
-                    ResetSetup(checkers);
+                    ResetSetup(checkers, out displayLevel);
                     break;
                 case 7:
                     Console.Clear();
@@ -326,7 +325,7 @@ static class Program
             }   
         }
     }
-    private static void MainMenu()
+    private static void MainMenu(out int displayLevel)
     {
         Console.Clear();
         Console.CursorVisible = false;
@@ -346,14 +345,15 @@ static class Program
         int selectedOption = SelectionMenu(menuOptions);
         if (selectedOption == 0)
         {
-            _displayLevel = 1;
+            displayLevel = 1;
         }
         else
         {
+            displayLevel = 0;
             Environment.Exit(0);
         }
     }
-    private static void AddBoard(GameController checkers)
+    private static void AddBoard(GameController checkers, out int displayLevel)
     {
         Console.Clear();
         Console.ForegroundColor = ConsoleColor.Green;
@@ -371,10 +371,11 @@ static class Program
 
         int selectedOption = SelectionMenu(menuOptions);
         CheckersBoard board = new CheckersBoard(menuOptions[selectedOption]);
-        if (checkers.SetBoard(board))
-            _displayLevel = 2;
+        checkers.SetBoard(board);
+        
+        displayLevel = 2;
     }
-    private static void AddPlayer(GameController checkers)
+    private static void AddPlayer(GameController checkers, out int displayLevel)
     {
         Console.Clear();
         Console.CursorVisible = true;
@@ -394,9 +395,9 @@ static class Program
             Console.WriteLine();
         }
             
-        _displayLevel = 3;
+        displayLevel = 3;
     }
-    private static void AddPiece(GameController checkers)
+    private static void AddPiece(GameController checkers, out int displayLevel)
     {
         foreach (var player in checkers.GetActivePlayer())
         {
@@ -406,11 +407,11 @@ static class Program
             List<Piece> newPiece = (List<Piece>) checkers.GeneratePieces(color, pieceQty);
             checkers.SetPlayerPieces(player, newPiece);
         }
-
-        if (checkers.SetPieceToBoard())
-            _displayLevel = 4;
+        checkers.SetPieceToBoard();
+        
+        displayLevel = 4;
     }
-    private static void FinalizeSetup(GameController checkers)
+    private static void FinalizeSetup(GameController checkers, out int displayLevel)
     {
         Console.Clear();
         Console.ForegroundColor = ConsoleColor.Green;
@@ -432,12 +433,12 @@ static class Program
         };
 
         int selectedOption = SelectionMenu(menuOptions);
-        _displayLevel = (selectedOption == 0) ? 7 : 6;
+        displayLevel = (selectedOption == 0) ? 7 : 6;
     }
-    private static void ResetSetup(GameController checkers)
+    private static void ResetSetup(GameController checkers, out int displayLevel)
     {
         checkers.RemoveAllPlayers();
-        _displayLevel = 0;
+        displayLevel = 0;
     }
     private static int SelectionMenu<T> (T[] menuOptions)
     {
