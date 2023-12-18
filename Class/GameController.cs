@@ -10,12 +10,14 @@ public class GameController
     private GameStatus _status;
     private IPlayer? _currentPlayer;
 
+    
     public GameController()
     {
         _playerPieces = new();
         _currentPlayer = null;
     }
 
+    
     #region Action / Delegate
     public event Action<Piece>? PieceCaptured;
     public event Action<Piece, Position>? PieceMoved;
