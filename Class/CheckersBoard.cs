@@ -2,15 +2,15 @@
 
 namespace CheckersGame.Class;
 
-public class CheckersBoard : IBoard<Piece?[,]>
+public class CheckersBoard<T> : IBoard<T>
 {
     public int Size { get; }
     
-    public Piece?[,] Layout { get; set; }
+    public T?[,] Layout { get; set; }
 
     public CheckersBoard(int size = 8)
     {
         Size = size;
-        Layout = new Piece?[Size, Size];
+        Layout = new T?[Size, Size];
     }
 }

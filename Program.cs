@@ -8,6 +8,7 @@ namespace CheckersGame;
 
 static class Program
 {
+       
     #region Main
     static void Main()
     {
@@ -17,12 +18,13 @@ static class Program
         checkers.PiecePromoted += HandlePiecePromoted;
         checkers.PlayerAdded += HandlePlayerAdded;
         
-        SetupGame(checkers);
+        SetupDisplay(checkers);
         bool started = checkers.Start();
         
         Piece? selectedPiece = null;
         int lastPieceCount = checkers.CountPieceOnBoard();
         bool firstMove = true;
+        
         while (started && !checkers.GameOver())
         {
             Console.Clear();
@@ -69,6 +71,8 @@ static class Program
             {
                 firstMove = false;
             }
+            
+            Console.ReadKey(false);
         }
         Console.Clear();
         PrintWinner(checkers);
@@ -238,7 +242,7 @@ static class Program
         }
         
     }
-    static string GenerateColumnSeparator(int size)
+    static string GenerateColumnSeparator(int size) // HArusnya ROW SEPARTATOR
     {
         StringBuilder sb = new();
         
@@ -262,39 +266,38 @@ static class Program
 
         return sb.ToString();
     }
+    static void ConsolePrint(string? message, ConsoleColor color = ConsoleColor.White)
+    {
+        Console.ForegroundColor = color;
+        Console.Write(message);
+        Console.ResetColor();
+    }
     #endregion
     
     #region Event Handler
     private static void HandlePlayerAdded(IPlayer player)
     {
-        Console.WriteLine($"🤴 New Player Added: {player.Name}");
-        Thread.Sleep(500);
+        ConsolePrint($"🤴 New Player Added: {player.Name}\n");
     }
     private static void HandlePieceMoved(Piece piece, Position position)
     {
-        Console.ForegroundColor = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
-        Console.WriteLine($"Piece {piece.Id} moved to: {position}");
-        Console.ResetColor();
-        Thread.Sleep(500);
+        ConsoleColor color = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
+        ConsolePrint($"Piece {piece.Id} moved to: {position}/n", color);
     }
     private static void HandlePieceCaptured(Piece piece)
     {
-        Console.ForegroundColor = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
-        Console.WriteLine($"Piece {piece.Id} have been captured");
-        Console.ResetColor();
-        Thread.Sleep(500);
+        ConsoleColor color = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
+        ConsolePrint($"Piece {piece.Id} have been captured/n", color);
     }
     private static void HandlePiecePromoted(Piece piece)
     {
-        Console.ForegroundColor = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
-        Console.WriteLine($"Piece {piece.Id} have been Promoted to {PieceStatus.King.ToString()}");
-        Console.ResetColor();
-        Thread.Sleep(500);
+        ConsoleColor color = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
+        ConsolePrint($"Piece {piece.Id} have been Promoted to {PieceStatus.King.ToString()}/n", color);
     }
     #endregion
 
     #region Setup Game
-    public static void SetupGame(GameController checkers)
+    public static void SetupDisplay(GameController checkers)
     {
         int displayLevel = 0;
         while (true)
@@ -370,8 +373,7 @@ static class Program
         };
 
         int selectedOption = SelectionMenu(menuOptions);
-        CheckersBoard board = new CheckersBoard(menuOptions[selectedOption]);
-        checkers.SetBoard(board);
+        checkers.SetBoard(new CheckersBoard<Piece>(menuOptions[selectedOption]));
         
         displayLevel = 2;
     }
@@ -401,12 +403,12 @@ static class Program
     {
         foreach (var player in checkers.GetActivePlayer())
         {
-            int pieceQty = checkers.MaxPlayerPieces();
             PieceColor color = (player.Id == 1) ? PieceColor.Blue : PieceColor.Red;
+            int pieceQty = checkers.MaxPlayerPieces();
             
-            List<Piece> newPiece = (List<Piece>) checkers.GeneratePieces(color, pieceQty);
-            checkers.SetPlayerPieces(player, newPiece);
+            checkers.SetPlayerPieces(player, checkers.GeneratePieces(color, pieceQty).ToList());
         }
+        
         checkers.SetPieceToBoard();
         
         displayLevel = 4;
@@ -414,18 +416,15 @@ static class Program
     private static void FinalizeSetup(GameController checkers, out int displayLevel)
     {
         Console.Clear();
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine("Finalize Setup");
-        Console.ResetColor();
-        Console.WriteLine();
-        
-        Console.WriteLine($"Board Size: {checkers.GetBoardSize()}");
+        ConsolePrint("Finalize Setup\n\n", ConsoleColor.Green);
+        ConsolePrint($"Board Size: {checkers.GetBoardSize()}\n");
+
         foreach (var player in checkers.GetActivePlayer())
         {
-            Console.WriteLine($"Player {player.Id}: {player.Name}");
+            ConsolePrint($"Player {player.Id}: {player.Name}\n");
         }
         
-        Console.WriteLine("\n\u001b[36mPlay Checkers?\u001b[0m");
+        ConsolePrint("\nPlay Checkers?\n", ConsoleColor.Cyan);
         string[] menuOptions = new[]
         {
             "Yes",

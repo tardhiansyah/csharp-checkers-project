@@ -6,7 +6,7 @@ namespace CheckersGame.Class;
 public class GameController
 {
     private Dictionary<IPlayer, List<Piece>> _playerPieces;
-    private IBoard<Piece?[,]> _board = null!;
+    private IBoard<Piece> _board = null!;
     private GameStatus _status;
     private IPlayer? _currentPlayer;
     
@@ -24,7 +24,7 @@ public class GameController
     /// </summary>
     /// <param name="board">Checkers board.</param>
     /// <param name="players">The players.</param>
-    public GameController(IBoard<Piece?[,]> board, params IPlayer[] players)
+    public GameController(IBoard<Piece> board, params IPlayer[] players)
     {
         _board = board;
         _playerPieces = new Dictionary<IPlayer, List<Piece>>();
@@ -221,7 +221,7 @@ public class GameController
     /// <returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Piece"/>.</returns>
     public IEnumerable<Piece> GeneratePieces(PieceColor color, int quantity = 12)
     {
-        return Enumerable.Range(1, quantity).Select(count => new Piece(count, color)).ToList();
+        return Enumerable.Range(1, quantity).Select(count => new Piece(count, color));
     }
     
     /// <summary>
@@ -229,12 +229,13 @@ public class GameController
     /// </summary>
     /// <param name="board">New checkers board.</param>
     /// <returns>Return <c>true</c> if board was set before the game started; otherwise, <c>false</c>.</returns>
-    public bool SetBoard(IBoard<Piece?[,]> board)
+    public bool SetBoard(IBoard<Piece> board)
     {
         if (_status != GameStatus.NotReady)
             return false;
         
         _board = board;
+        
         return true;
     }
     
@@ -268,7 +269,8 @@ public class GameController
         if (_status != GameStatus.NotReady || _playerPieces.Count == 0)
             return false;
         
-        _playerPieces.Keys.ToList().ForEach(player => SetPieceToBoard(player));
+        GetActivePlayer().ToList().ForEach(player => SetPieceToBoard(player));
+        
         return true;
     }
     
@@ -286,9 +288,9 @@ public class GameController
             return false;
         
         int nRowWithPieces = (GetBoardSize() - 2) / 2;
-        int nextRow = 0, pieceCounter = 0;
         int startRow = (_playerPieces[player].First().Color == PieceColor.Blue) ? 0 : (GetBoardSize() - nRowWithPieces);
         
+        int nextRow = 0, pieceCounter = 0;
         foreach (Piece piece in _playerPieces[player])
         {
             int row = startRow + nextRow;
@@ -296,7 +298,7 @@ public class GameController
             
             if (SetPieceToBoard(piece, row, column))
                 pieceCounter++;
-
+        
             if (column >= GetBoardSize() - 2 && row < GetBoardSize())
             {
                 pieceCounter = 0;
@@ -340,18 +342,21 @@ public class GameController
     /// <returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Piece"/>.</returns>
     public IEnumerable<Piece> GetPieces()
     {
-        return _playerPieces.Values.SelectMany(playerPiece => playerPiece).ToList();
+        return _playerPieces.Values.SelectMany(playerPiece => playerPiece);
     }
     
     /// <summary>
-    /// Get selected player's active pieces.
+    /// Gets the pieces associated with the specified player.
     /// </summary>
-    /// <param name="player">The player.</param>
-    /// <returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Piece"/> if player is found; otherwise empty.</returns>
+    /// <param name="player">The player whose pieces are to be retrieved.</param>
+    /// <returns>
+    /// An <see cref="IEnumerable{T}"/> of <see cref="Piece"/> representing the pieces associated with the player.
+    /// If the player is not found, returns an empty collection.
+    /// </returns>
     public IEnumerable<Piece> GetPieces(IPlayer player)
     {
-        if (_playerPieces.TryGetValue(player, out List<Piece>? playerPieces))
-            return playerPieces;
+        if (_playerPieces.TryGetValue(player, out List<Piece>? pieces))
+            return pieces;
         
         return Enumerable.Empty<Piece>();
     }
@@ -406,7 +411,7 @@ public class GameController
         if (position == null)
             return false;
         
-        return RemovePieceFromBoard(position.Row, position.Column) && RemovePieceFromPlayer(piece);
+        return RemovePieceFromBoard(position) && RemovePieceFromPlayer(piece);
     }
     
     /// <summary>
@@ -466,7 +471,7 @@ public class GameController
     /// <returns>Return <c>true</c> if piece successfully removed; otherwise, <c>false</c>.</returns>
     private bool RemovePieceFromPlayer(Piece removedPiece)
     {
-        IPlayer? matchingPlayer = _playerPieces.Keys.FirstOrDefault(player => _playerPieces[player].Any(piece => piece.Equals(removedPiece)));
+        IPlayer? matchingPlayer = GetActivePlayer().FirstOrDefault(player => _playerPieces[player].Any(piece => piece.Equals(removedPiece)));
         if (matchingPlayer == null)
             return false;
 
@@ -532,14 +537,7 @@ public class GameController
     ///<returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Position"/> for all piece of the player.</returns>
     public IEnumerable<Position> GetPossibleMoves(IPlayer player)
     {
-        List<Position> possibleMove = new List<Position>();
-        
-        foreach (var piece in _playerPieces[player])
-        {
-            possibleMove.AddRange(GetPossibleMoves(piece));
-        }
-        
-        return possibleMove;
+        return _playerPieces[player].SelectMany(piece => GetPossibleMoves(piece));
     }
 
     /// <summary>
@@ -569,30 +567,30 @@ public class GameController
                     if (row == skippedRow)
                         continue;
                 }
-                
+
                 int targetRow = piecePos.Row + row;
                 int targetColumn = piecePos.Column + column;
                 if (!WithinBoundaries(targetRow, targetColumn))
                     continue;
                 
-                // Check single tile moves
-                if (firstMove && IsValidMove(targetRow, targetColumn))
-                {
-                    possibleMoves.Add(new Position(targetRow, targetColumn));
-                    continue;
-                }
-                
-                // Check jump / capture moves
-                int jumpRow = piecePos.Row + 2 * row;
-                int jumpColumn = piecePos.Column + 2 * column;
-                if (!IsValidMove(jumpRow, jumpColumn))
-                    continue;
-                
+                // Check possible single tile and jump move
                 Piece? enemyPiece = GetPiece(targetRow, targetColumn);
-                if (enemyPiece == null || enemyPiece.Color == piece.Color)
-                    continue;
-                
-                possibleMoves.Add(new Position(jumpRow, jumpColumn));
+                if (enemyPiece == null)
+                {
+                    if (!firstMove)
+                        continue;
+
+                    possibleMoves.Add(new Position(targetRow, targetColumn));
+                }
+                else if (enemyPiece.Color != piece.Color)
+                {
+                    int jumpRow = targetRow + row;
+                    int jumpColumn = targetColumn + column;
+                    if (!IsValidMove(jumpRow, jumpColumn))
+                        continue;
+                    
+                    possibleMoves.Add(new Position(jumpRow, jumpColumn));
+                }
             }
         }
         return possibleMoves;
@@ -640,18 +638,19 @@ public class GameController
     /// </summary>
     /// <param name="source">Selected piece position.</param>
     /// <param name="target">Selected piece new position.</param>
+    /// <param name="firstMove">true if this is the first piece movement, false if this is the second or more jump movements.</param>
     /// <returns>Return true if piece moved successfully; otherwise, return false.</returns>
-    public bool MovePiece(Position source, Position target)
+    public bool MovePiece(Position source, Position target, in bool firstMove = true)
     {
         Piece? piece = GetPiece(source);
         if (piece == null)
             return false;
 
-        return MovePiece(piece, target);
+        return MovePiece(piece, target, firstMove);
     }
     
     /// <summary>
-    ///  /// Move selected piece to new position
+    /// Move selected piece to new position
     /// </summary>
     /// <param name="piece">Piece that will be moved.</param>
     /// <param name="target">New piece target position.</param>
@@ -680,32 +679,31 @@ public class GameController
         
         return true;
     }
-    
+
     /// <summary>
-    /// Compare piece new target position with list of valid or possible position.
+    /// Validates whether the specified <paramref name="target"/> position is a valid move for the given <paramref name="piece"/>.
     /// </summary>
-    /// <param name="piece">Piece that will be moved.</param>
-    /// <param name="target">New piece target position.</param>
-    /// <param name="firstMove">true if this is the first piece movement, false if this is the second or more jump movements.</param>
-    /// <returns>true if new position is possible to be moved on; otherwise, false.</returns>
+    /// <param name="piece">The piece for which the move is being validated.</param>
+    /// <param name="target">The target position to be validated.</param>
+    /// <param name="firstMove">A boolean value indicating whether it is the first move of the piece (default is <c>true</c>)</param>
+    /// <returns>
+    ///   <c>true</c> if the move to the <paramref name="target"/> position is valid; otherwise, <c>false</c>.
+    /// </returns>
     private bool ValidateNewPosition(Piece piece, Position target, in bool firstMove = true)
     {
-        IEnumerable<Position> possibleMoves = GetPossibleMoves(piece, firstMove);
-        
-        foreach (var position in possibleMoves)
-        {
-            if (position.Row == target.Row && position.Column == target.Column)
-                return true;
-        }
-        return false;
+        return GetPossibleMoves(piece, firstMove).Any(position => 
+            position.Row == target.Row && position.Column == target.Column);
     }
     
     /// <summary>
-    /// Check if this is single tile move or double tile move (jump / capture move).
+    /// Determines whether a move from the specified <paramref name="source"/> to <paramref name="target"/>
+    /// is a jump move, involving a piece moving two rows and two columns.
     /// </summary>
-    /// <param name="source">Piece last position.</param>
-    /// <param name="target">Piece new position.</param>
-    /// <returns>Return true if this is a jump move; otherwise, false.</returns>
+    /// <param name="source">The source position from which the capture is initiated.</param>
+    /// <param name="target">The target position where the capturing piece moves.</param>
+    /// <returns>
+    ///   <c>true</c> if the move is a jump move; otherwise, <c>false</c>.
+    /// </returns>
     private bool IsJumpMove(Position source, Position target)
     {
         int deltaRow = target.Row - source.Row;
@@ -715,29 +713,49 @@ public class GameController
     }
     
     /// <summary>
-    /// Capture piece that was successfully stepped over by enemy piece.
+    /// Captures a piece located in between the last position and new position.
     /// </summary>
-    /// <param name="source">Enemy previous position.</param>
-    /// <param name="target">Enemy new position.</param>
-    private void CapturePieceInBetween(Position source, Position target)
+    /// <param name="source">The source position from which the capture is initiated.</param>
+    /// <param name="target">The target position where the capturing piece moves.</param>
+    /// <returns>
+    ///   <c>true</c> if a piece is successfully captured and removed; otherwise, <c>false</c>.
+    /// </returns>
+    private bool CapturePieceInBetween(Position source, Position target)
     {
         int captureRow = (source.Row + target.Row) / 2;
         int captureColumn = (source.Column + target.Column) / 2;
 
         Piece? capturedPiece = GetPiece(captureRow, captureColumn);
         if (capturedPiece == null)
-            return;
+            return false;
         
         OnCapturePiece(capturedPiece);
-        RemovePiece(captureRow, captureColumn);
+        return RemovePiece(captureRow, captureColumn);
     }
     
     /// <summary>
-    /// Promote <see cref="PieceStatus.Regular"/> piece to <see cref="PieceStatus.King"/>.
+    /// Promotes a specified <paramref name="piece"/> to the status of a <see cref="PieceStatus.King"/> if it is eligible for promotion.
     /// </summary>
-    /// <param name="piece">Piece that will be promoted.</param>
-    /// <returns>Return <c>true</c> if piece successfully promoted; otherwise, <c>false</c>.</returns>
+    /// <param name="piece">The piece to be promoted.</param>
+    /// <returns>
+    ///   <c>true</c> if the piece is successfully promoted; otherwise, <c>false</c>.
+    /// </returns>
     public bool PromotePiece(Piece piece)
+    {
+        if (!CanPromotePiece(piece))
+            return false;
+
+        piece.Status = PieceStatus.King;
+        return PromotePieceFromPlayer(piece);
+    }
+    /// <summary>
+    /// Determines whether a specified <paramref name="piece"/> is eligible for promotion.
+    /// </summary>
+    /// <param name="piece">The piece to check for promotion eligibility.</param>
+    /// <returns>
+    ///   <c>true</c> if the piece is eligible for promotion; otherwise, <c>false</c>.
+    /// </returns>
+    private bool CanPromotePiece(Piece piece)
     {
         Position? piecePos = GetPosition(piece);
         if (piecePos == null)
@@ -747,116 +765,109 @@ public class GameController
         if (piecePos.Row != endRow)
             return false;
 
-        GetPiece(piecePos)!.Status = PieceStatus.King;
-        return PromotePieceFromPlayer(piece);
+        return true;
     }
-    
     /// <summary>
-    /// Promote selected piece from <see cref="List{T}"/> of <see cref="Piece"/> to <see cref="PieceStatus.King"/>.
+    /// Promotes a specified <paramref name="piece"/> to the status of a king.
     /// </summary>
-    /// <param name="promotedPiece">Piece that will be promoted.</param>
-    /// <returns>Return <c>true</c> if piece successfully promoted; otherwise, <c>false</c>.</returns>
-    private bool PromotePieceFromPlayer(Piece promotedPiece)
+    /// <param name="piece">The piece to be promoted.</param>
+    /// <returns>
+    ///   <c>true</c> if the piece is successfully promoted; otherwise, <c>false</c>.
+    /// </returns>
+    private bool PromotePieceFromPlayer(Piece piece)
     {
-        IPlayer? matchingPlayer = _playerPieces.Keys.FirstOrDefault(player => _playerPieces[player].Any(piece => piece.Equals(promotedPiece)));
-        if (matchingPlayer == null)
-            return false;
-         
-        Piece? matchingPiece = _playerPieces[matchingPlayer].FirstOrDefault(piece => piece.Equals(promotedPiece));
-        if (matchingPiece == null)
+        IEnumerable<Piece> pieces = GetPieces();
+        Piece? promotedPiece = pieces.FirstOrDefault(playerPiece => playerPiece.Equals(piece));
+        if (promotedPiece == null)
             return false;
         
-        matchingPiece.Status = PieceStatus.King;
-        OnPromotePiece(matchingPiece);
+        promotedPiece.Status = PieceStatus.King;
+        OnPromotePiece(promotedPiece);
         return true;
     }
     #endregion
     
     #region Game Status
     /// <summary>
-    /// Change current <see cref="GameStatus"/>.
+    /// Sets the current status of the game to the specified <paramref name="status"/>.
     /// </summary>
-    /// <param name="status">New <see cref="GameStatus"/>.</param>
-    /// <returns>Return <c>true</c> if successfully changed the game status; otherwise <c>false</c>.</returns>
+    /// <param name="status">The new <see cref="GameStatus"/> to set.</param>
+    /// <returns>
+    ///   <c>true</c> if the game status is successfully set; otherwise, <c>false</c>.
+    /// </returns>
     private bool SetGameStatus(GameStatus status)
     {
         if (status == _status)
             return false;
         
         _status = status;
-        OnChangeStatus(_status);
+        OnChangeStatus(status);
+        
         return true;
     }
     
     /// <summary>
-    /// Check current game status.
+    /// Retrieves the current status of the game.
     /// </summary>
     /// <returns>
-    /// Returns <see cref="GameStatus.NotReady"/>if game not started;
-    /// <see cref="GameStatus.Ready"/> if game successfully started, and waiting for first move;
-    /// <see cref="GameStatus.OnGoing"/> if player already take a move; and
-    /// <see cref="GameStatus.GameOver"/> if the game session is ended.
+    ///   The current <see cref="GameStatus"/> of the game.
     /// </returns>
+    /// <remarks>
+    /// The method returns the current status of the game, indicating whether it is NotReady, Ready, OnGoing, or GameOver.
+    /// </remarks>
     public GameStatus GetStatus()
     {
         return _status;
     }
     
     /// <summary>
-    /// Start current game session.
+    /// Starts the game, setting it to the ready state and initializing the first player's turn.
     /// </summary>
     /// <returns>
-    /// Return <c>true</c> if game successfully started; 
-    /// otherwise, <c>false</c> if not enough player or <see cref="GameStatus"/> is already started/on-going.
+    ///   <c>true</c> if the game is successfully started; otherwise, <c>false</c>.
     /// </returns>
     public bool Start()
     {
-        if (_playerPieces.Count < 2)
-            return false;
-        if (_status != GameStatus.NotReady)
+        if (_playerPieces.Count < 2 || _status != GameStatus.NotReady)
             return false;
         
         return SetGameStatus(GameStatus.Ready) && SetCurrentPlayer(_playerPieces.Keys.First());
     }
     
     /// <summary>
-    /// Check if current game session is over (one player runs out of pieces or resigns).
+    /// Checks if the game is over by determining if any player has eliminated all their enemy pieces.
     /// </summary>
-    /// <returns>Return <c>true</c> if game is over; otherwise, <c>false</c>.</returns>
+    /// <returns>
+    ///   <c>true</c> if the game is over; otherwise, <c>false</c>.
+    /// </returns>
     public bool GameOver()
     {
-        foreach (IPlayer player in _playerPieces.Keys)
-        {
-            if (_playerPieces[player].Count == 0)
-            {
-                SetGameStatus(GameStatus.GameOver);
-                break;
-            }
-        }
-        
-        return (GetStatus() == GameStatus.GameOver);
+        if (_playerPieces.Keys.FirstOrDefault(player => _playerPieces[player].Count == 0) != null)
+            return SetGameStatus(GameStatus.GameOver);
+
+        return false;
     }
     
     /// <summary>
-    /// Get winner of current game session.
+    /// Retrieves the player who has won the game by eliminating all enemy pieces.
     /// </summary>
-    /// <returns>Return the winning player; otherwise, null if game result is draw.</returns>
+    /// <returns>
+    ///   The winning player if the game is over and a winner is found; otherwise, returns <c>null</c>.
+    /// </returns>
     public IPlayer? GetWinner()
     {
-        foreach (IPlayer player in _playerPieces.Keys)
-        {
-            if (_playerPieces[player].Count == 0)
-                continue;
-
-            return player;
-        }
+        if (GameOver())
+            return _playerPieces.Keys.FirstOrDefault(player => _playerPieces[player].Count != 0);
+        
         return null;
     }
     
     /// <summary>
-    /// Change turn to the next player.
+    /// Advances the game to the next turn, changing the current player.
     /// </summary>
-    /// <returns>Returns <c>true</c> if successfully change player turn; otherwise, <c>false</c></returns>
+    /// <returns>
+    ///   <c>true</c> if the next turn is successfully set; otherwise, <c>false</c>.
+    /// </returns>
     public bool NextTurn()
     {
         if (_currentPlayer == null)
@@ -872,10 +883,12 @@ public class GameController
     }
     
     /// <summary>
-    /// Resign the player from the game.
+    /// Allows a player to resign from the game.
     /// </summary>
-    /// <param name="player">Resigned player.</param>
-    /// <returns>Return <c>true</c> if successfully resigned from the game; otherwise <c>false</c>.</returns>
+    /// <param name="player">The player who wants to resign.</param>
+    /// <returns>
+    ///   <c>true</c> if the player successfully resigns; otherwise, <c>false</c>.
+    /// </returns>
     public bool Resign(IPlayer player)
     {
         if (GetStatus() != GameStatus.OnGoing || GetStatus() != GameStatus.Ready)
