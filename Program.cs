@@ -180,7 +180,7 @@ static class Program
         for (int i = 0; i < board.GetLength(0); i++)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine(GenerateColumnSeparator(checkers.GetBoardSize()));
+            Console.WriteLine(GeneraterRowSeparator(checkers.GetBoardSize()));
             Console.Write($"{board.GetLength(0) - i:D2}");
             Console.ResetColor();
             
@@ -215,14 +215,14 @@ static class Program
             Console.WriteLine();
         }
         Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine(GenerateColumnSeparator(checkers.GetBoardSize()));
+        Console.WriteLine(GeneraterRowSeparator(checkers.GetBoardSize()));
         Console.WriteLine(GenerateRankName(checkers.GetBoardSize()));
         Console.ResetColor();
     }
-    static void PrintSelectedPiece(Piece selectedPiece)
+    static void ShowSelectedPiece(Piece selectedPiece)
     {
         Console.ForegroundColor = (selectedPiece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
-        Console.WriteLine($"\u001b[32mPIECE SELECTED: {selectedPiece.Id}-{selectedPiece.Status}\u001b[0m");
+        Console.WriteLine("PIECE SELECTED: {0}-{1}", selectedPiece.Status, selectedPiece.Id);
         Console.ResetColor();
     }
     static void PrintWinner(GameController checkers)
@@ -242,22 +242,22 @@ static class Program
         }
         
     }
-    static string GenerateColumnSeparator(int size) // HArusnya ROW SEPARTATOR
+    static string GeneraterRowSeparator(int size)
     {
         StringBuilder sb = new();
         
+        sb.Append("--");
         for (int i = 0; i < size; i++)
         {
             sb.Append("-------");
         }
-
-        sb.Append("--");
         
         return sb.ToString();
     }
     static string GenerateRankName(int size)
     {
         StringBuilder sb = new();
+        
         sb.Append("  ");
         for (int i = 0; i < size; i++)
         {
@@ -266,12 +266,7 @@ static class Program
 
         return sb.ToString();
     }
-    static void ConsolePrint(string? message, ConsoleColor color = ConsoleColor.White)
-    {
-        Console.ForegroundColor = color;
-        Console.Write(message);
-        Console.ResetColor();
-    }
+    
     #endregion
     
     #region Event Handler

@@ -1,41 +1,50 @@
 ﻿using CheckersGame.Enumeration;
 using CheckersGame.Interface;
+using Microsoft.Extensions.Logging;
 
 namespace CheckersGame.Class;
 
 public class GameController
 {
-    private Dictionary<IPlayer, List<Piece>> _playerPieces;
+    private readonly ILogger<GameController>? _logger;
+    private readonly Dictionary<IPlayer, HashSet<Piece>> _players;
     private IBoard<Piece> _board = null!;
     private GameStatus _status;
     private IPlayer? _currentPlayer;
     
     /// <summary>
-    /// Create new checkers game instance (manual setup). Manually assign board, players, and pieces later.
+    /// Initializes a new instance of the <see cref="GameController"/> class.
     /// </summary>
-    public GameController()
+    /// <param name="logger">Optional logger for recording log messages related to the game controller.</param>
+    public GameController(ILogger<GameController>? logger = null)
     {
-        _playerPieces = new();
+        _logger = logger;
+        _players = new Dictionary<IPlayer, HashSet<Piece>>();
         _currentPlayer = null;
+        _logger?.LogInformation("Create new game controller instances");
     }
-
+    
     /// <summary>
-    /// Create new checkers game instance (simple setup).
+    /// Initializes a new instance of the <see cref="GameController"/> class with specified parameters.
     /// </summary>
-    /// <param name="board">Checkers board.</param>
-    /// <param name="players">The players.</param>
-    public GameController(IBoard<Piece> board, params IPlayer[] players)
+    /// <param name="board">The game board used in the controller.</param>
+    /// <param name="player1">The first player participating in the game.</param>
+    /// <param name="player2">The second player participating in the game.</param>
+    /// <param name="logger">Optional logger for recording log messages related to the game controller.</param>
+    public GameController(IBoard<Piece> board, IPlayer player1, IPlayer player2, ILogger<GameController>? logger = null)
     {
+        _logger = logger;
         _board = board;
-        _playerPieces = new Dictionary<IPlayer, List<Piece>>();
+        _players = new Dictionary<IPlayer, HashSet<Piece>>();
+        _logger?.LogInformation("Create new game controller instances");
         
-        foreach (var player in players)
-        {
-            _playerPieces.Add(player, new List<Piece>());
-        }
-
-        SetPlayerPieces(_playerPieces.Keys.First(), (List<Piece>)GeneratePieces(PieceColor.Blue, MaxPlayerPieces()));
-        SetPlayerPieces(_playerPieces.Keys.Last(), (List<Piece>)GeneratePieces(PieceColor.Red, MaxPlayerPieces()));
+        AddPlayer(player1);
+        AddPlayer(player2);
+        
+        SetPlayerPieces(player1, (HashSet<Piece>)GeneratePieces(PieceColor.Blue, MaxPlayerPieces()));
+        SetPlayerPieces(player2, (HashSet<Piece>)GeneratePieces(PieceColor.Red, MaxPlayerPieces()));
+        
+        SetCurrentPlayer(player1);
     }
     
     #region Action / Delegate
@@ -43,255 +52,305 @@ public class GameController
     public event Action<Piece, Position>? PieceMoved;
     public event Action<Piece>? PiecePromoted;
     public event Action<IPlayer>? PlayerAdded;
-    public event Action<IPlayer>? PlayerTurnChanged;
+    public event Action<IPlayer>? CurrentPlayerChanged;
     public event Action<GameStatus>? StatusChanged;
     
     /// <summary>
-    /// Action to be invoked when game status changed.
+    /// Raises the event indicating a change in the game status.
     /// </summary>
-    /// <param name="status">New game status.</param>
-    protected virtual void OnChangeStatus(GameStatus status)
+    /// <param name="status">The new game status.</param>
+   protected virtual void OnChangeStatus(GameStatus status)
     {
+        _logger?.LogInformation("Game status changed to: {Status}", status);
         StatusChanged?.Invoke(status);
     }
-    
+
     /// <summary>
-    /// Action to be invoked when turn changed.
+    /// Raises the event indicating a change in the game current turn player.
     /// </summary>
-    /// <param name="player">player turn</param>
-    protected virtual void OnChangeTurnPlayer(IPlayer player)
+    /// <param name="player">The player whose turn it is now.</param>
+    protected virtual void OnChangeCurrentPlayer(IPlayer player)
     {
-        PlayerTurnChanged?.Invoke(player);
+        _logger?.LogInformation("Current player changed to: {Player}", player);
+        CurrentPlayerChanged?.Invoke(player);
     }
     
     /// <summary>
-    /// Action to be invoked when there are new player added.
+    /// Raises the event indicating the addition of a new player to the game.
     /// </summary>
-    /// <param name="player">New player added.</param>
+    /// <param name="player">The player added to the game.</param>
     protected virtual void OnAddPlayer(IPlayer player)
     {
+        _logger?.LogInformation("New player added: {Player}", player);
         PlayerAdded?.Invoke(player);
     }
     
     /// <summary>
-    /// Action to be invoked when there are piece moved.
+    /// Raises the event indicating the movement of a piece to a new position on the board.
     /// </summary>
-    /// <param name="piece">Piece moved.</param>
-    /// <param name="position">New piece position.</param>
+    /// <param name="piece">The piece that has been moved.</param>
+    /// <param name="position">The new position of the piece on the board.</param>
     protected virtual void OnMovePiece(Piece piece, Position position)
     {
+        _logger?.LogInformation("Piece {Piece} moved to {Position}", piece, position);
         PieceMoved?.Invoke(piece, position);
     }
     
     /// <summary>
-    /// Action to be invoked when there are piece captured.
+    /// Raises the event indicating the capture of a piece on the board.
     /// </summary>
-    /// <param name="piece">Piece captured.</param>
+    /// <param name="piece">The piece that has been captured.</param>
     protected virtual void OnCapturePiece(Piece piece)
     {
+        _logger?.LogInformation("Piece captured: {Piece}", piece);
         PieceCaptured?.Invoke(piece);
     }
     
     /// <summary>
-    /// Action to be invoked when there are piece promoted to <see cref="PieceStatus.King"/>.
+    /// Raises the event indicating the promotion of a piece on the board.
     /// </summary>
-    /// <param name="piece">Piece promoted</param>
+    /// <param name="piece">The piece that has been promoted.</param>
     protected virtual void OnPromotePiece(Piece piece)
     {
+        _logger?.LogInformation("Piece promoted: {Piece}", piece);
         PiecePromoted?.Invoke(piece);
-    }
+    } 
     #endregion
     
     #region Get-Set Player
     /// <summary>
-    /// Adding new player to the game.
+    /// Adds a new player to the game.
     /// </summary>
-    /// <param name="player">New player that implemented <see cref="IPlayer"/></param>
-    /// <returns>
-    ///     <c>true</c> - if the player is successfully added; otherwise, <c>false</c>.
-    /// </returns>
+    /// <param name="player">The player to be added.</param>
+    /// <returns>True if the player is successfully added; otherwise, false.</returns>
     public bool AddPlayer(IPlayer player)
     {
-        if (_playerPieces.TryAdd(player, new List<Piece>()))
+        if (!_players.TryAdd(player, new HashSet<Piece>()))
         {
-            OnAddPlayer(player);
-            return true;
+            _logger?.LogWarning("Attempt to add new player {Player} failed", player);
+            return false;
         }
         
-        return false;
-    }
-    
-    /// <summary>
-    /// Set current turn player.
-    /// </summary>
-    /// <param name="player">Player for current turn</param>
-    /// <returns>
-    ///     <c>Return true</c> if the current turn player was successfully changed; otherwise, <c>false</c>.
-    /// </returns>
-    public bool SetCurrentPlayer(IPlayer player)
-    {
-        if (!IsPlayerValid(player))
-            return false;
-        
-        _currentPlayer = player;
-        OnChangeTurnPlayer(_currentPlayer);
+        OnAddPlayer(player);
         return true;
     }
     
     /// <summary>
-    /// Get this turn player.
+    /// Sets the player for this game turn.
     /// </summary>
-    /// <returns>Return this turn player which implements <see cref="IPlayer"/>; otherwise, null if no player have been set for this turn.</returns>
+    /// <param name="player">The player to be set as the current player.</param>
+    /// <returns>True if the current player is successfully set; otherwise, false.</returns>
+    public bool SetCurrentPlayer(IPlayer player)
+    {
+        if (!IsPlayerValid(player))
+        {
+            _logger?.LogWarning("Attempt to change current player to {Player} failed", player);
+            return false;
+        }
+        
+        _currentPlayer = player;
+        OnChangeCurrentPlayer(player);
+        return true;
+    }
+    
+    /// <summary>
+    /// Gets the current player of the game.
+    /// </summary>
+    /// <returns>The current player, or null if no current player is set.</returns>
     public IPlayer? GetCurrentPlayer()
     {
+        if (_currentPlayer == null)
+        {
+            _logger?.LogWarning("Attempt to get current player failed: {CurrentPlayer}", _currentPlayer);
+        }
+        
         return _currentPlayer;
     }
     
     /// <summary>
-    /// Get all active players in the game.
+    /// Gets the active players in the game.
     /// </summary>
-    /// <returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="IPlayer"/> which has elements of all active players.</returns>
+    /// <returns>An enumerable of active players.</returns>
     public IEnumerable<IPlayer> GetActivePlayer()
     {
-        return _playerPieces.Keys;
+        return _players.Keys;
     }
     
     /// <summary>
-    /// Remove all players and their pieces from the game.
+    /// Removes all players from the game.
     /// </summary>
     public void RemoveAllPlayers()
     {
-        _playerPieces.Clear();
+        _logger?.LogInformation("Removing all players from the game");
+        _players.Clear();
     }
     
     /// <summary>
-    /// Assign new pieces to players in the game.
+    /// Sets the pieces for a specific player.
     /// </summary>
-    /// <param name="player">Players who have been added to the game.</param>
-    /// <param name="pieces">A <see cref="List{T}"/> of type <see cref="Piece"/> to be assigned to the player.</param>
-    /// <returns>Return <c>true</c> if successfully assigned; otherwise, <c>false</c> if the player not found in the game.</returns>
-    public bool SetPlayerPieces(IPlayer player, List<Piece> pieces)
+    /// <param name="player">The player whose pieces are to be set.</param>
+    /// <param name="pieces">The set of pieces to be associated with the player.</param>
+    /// <returns>True if the pieces are successfully set for the player; otherwise, false.</returns>
+    public bool SetPlayerPieces(IPlayer player, HashSet<Piece> pieces)
     {
         if (!IsPlayerValid(player))
+        {
+            _logger?.LogWarning("Attempt to add pieces to player {Player} failed", player);
             return false;
+        }
         
-        _playerPieces[player] = pieces;
+        _players[player] = pieces;
+        _logger?.LogInformation("New pieces added to player {Player}", player);
         return true;
     }
     
     /// <summary>
-    /// Get all active pieces from all active players.
+    /// Gets the dictionary of players and their associated pieces.
     /// </summary>
-    /// <returns>Returns <see cref="Dictionary{T,T}"/> with key <see cref="IPlayer"/> and value <see cref="IEnumerable{T}"/> of type <see cref="Piece"/>.</returns>
-    public Dictionary<IPlayer, List<Piece>> GetPlayerPieces()
+    /// <returns>A dictionary containing players and their associated pieces.</returns>
+    public Dictionary<IPlayer, HashSet<Piece>> GetPlayers()
     {
-        return _playerPieces;
+        return _players;
     }
     
     /// <summary>
-    /// Get all active pieces from one player.
+    /// Gets the pieces associated with a specific player.
     /// </summary>
-    /// <param name="player">player to be checked.</param>
-    /// <returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Piece"/> if the player found; otherwise, returns empty <see cref="IEnumerable{T}"/>.</returns>
+    /// <param name="player">The player whose pieces are to be retrieved.</param>
+    /// <returns>An enumerable of pieces associated with the player, or an empty enumerable if the player is not found.</returns>
     public IEnumerable<Piece> GetPlayerPieces(IPlayer player)
     {
         if (!IsPlayerValid(player))
+        {
+            _logger?.LogWarning("Attempt to get pieces from player {Player} failed", player);
             return Enumerable.Empty<Piece>();
+        }
+        
+        return _players[player];
+    }
 
-        return _playerPieces[player];
+    /// <summary>
+    /// Retrieves the player who owns the specified piece.
+    /// </summary>
+    /// <param name="piece">The piece for which the owner player is to be retrieved.</param>
+    /// <returns>
+    /// The player who owns the specified piece, or null if the piece is not found among any players.
+    /// </returns>
+    public IPlayer? GetPlayerByPieces(Piece piece)
+    {
+        IPlayer? player = _players.Keys.FirstOrDefault(player => _players[player].Contains(piece));
+        if (player == null)
+        {
+            _logger?.LogWarning("Attempt to get player that owns piece with ID {Id} and Color {Color} failed", piece.Id, piece.Color);
+            return null;
+        }
+        
+        return player;
     }
     
     /// <summary>
-    /// Check if the player is an active player.
+    /// Checks if a player is valid (exists in the game).
     /// </summary>
-    /// <param name="player">Player to be checked.</param>
-    /// <returns>Return <c>true</c> if player found in the game; otherwise, <c>false</c>.</returns>
+    /// <param name="player">The player to be checked.</param>
+    /// <returns>True if the player is valid; otherwise, false.</returns>
     private bool IsPlayerValid(IPlayer player)
     {
-        return _playerPieces.ContainsKey(player);
+        if (!_players.ContainsKey(player))
+        {
+            _logger?.LogWarning("Player {Player} is not found", player);
+            return false;
+        }
+        
+        return true;
     }
     #endregion
     
     #region Get-Set Pieces & Board
     /// <summary>
-    /// Generate new checkers pieces.
+    /// Generates a specified quantity of pieces with the given color.
     /// </summary>
-    /// <param name="color">Color of the piece.</param>
-    /// <param name="quantity">Number of piece to be generated.</param>
-    /// <returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Piece"/>.</returns>
+    /// <param name="color">The color of the pieces to generate.</param>
+    /// <param name="quantity">The number of pieces to generate (default is 12).</param>
+    /// <returns>An enumerable of generated pieces.</returns>
     public IEnumerable<Piece> GeneratePieces(PieceColor color, int quantity = 12)
     {
+        _logger?.LogInformation("Generating {Quantity} {Color} Pieces", quantity, color);
+        
         return Enumerable.Range(1, quantity).Select(count => new Piece(count, color));
     }
     
     /// <summary>
-    /// Set a new checkers board to be used.
+    /// Sets the game board to the specified board.
     /// </summary>
-    /// <param name="board">New checkers board.</param>
-    /// <returns>Return <c>true</c> if board was set before the game started; otherwise, <c>false</c>.</returns>
+    /// <param name="board">The new game board.</param>
+    /// <returns>True if the board is successfully set; otherwise, false.</returns>
     public bool SetBoard(IBoard<Piece> board)
     {
-        if (_status != GameStatus.NotReady)
+        if (GetStatus() != GameStatus.NotReady)
+        {
+            _logger?.LogWarning("Attempt to set new board {Board} with size {Board.Size} failed", board, board.Size);
             return false;
+        }
         
         _board = board;
-        
+        _logger?.LogInformation("Attempt to set new board {Board} with size {Board.Size} is success", board, board.Size);
         return true;
     }
     
     /// <summary>
-    /// Get number of tiles in one axis (symmetrical board).
+    /// Gets the size of the game board.
     /// </summary>
-    /// <returns>number of tiles in a board axis.</returns>
+    /// <returns>The size of the game board.</returns>
     public int GetBoardSize()
     {
         return _board.Layout.GetLength(0);
     }
     
     /// <summary>
-    /// Get a 2 dimensional array representing piece position on the board.
+    /// Gets the layout of the game board.
     /// </summary>
-    /// <returns>Returns an <see cref="Array"/> of <see cref="Piece"/> representing it's position on the board.</returns>
+    /// <returns>The layout of the game board as a 2D array of pieces.</returns>
     public Piece?[,] GetBoardLayout()
     {
         return _board.Layout;
     }
     
     /// <summary>
-    /// Assign position on the board for all pieces owned by both player.
+    /// Sets pieces for all active players on the game board.
     /// </summary>
-    /// <returns>
-    /// Return <c>true</c> if all pieces successfully assigned to board; 
-    /// otherwise, <c>false</c> if player don't have any pieces or current game status is not <see cref="GameStatus.NotReady"/>.
-    /// </returns>
+    /// <returns>True if the pieces are successfully set; otherwise, false.</returns>
     public bool SetPieceToBoard()
     {
-        if (_status != GameStatus.NotReady || _playerPieces.Count == 0)
+        if (GetStatus() != GameStatus.NotReady || !GetActivePlayer().Any())
+        {
+            _logger?.LogWarning("Attempt to set pieces on the board failed");
             return false;
-        
-        GetActivePlayer().ToList().ForEach(player => SetPieceToBoard(player));
-        
+        }
+
+        Parallel.ForEach(GetActivePlayer(), player => SetPieceToBoard(player));
+        _logger?.LogInformation("Attempt to set pieces on the board is success");
         return true;
     }
     
     /// <summary>
-    /// Assign position on the board (2D Array) for all pieces owned by player.
+    /// Sets pieces for a specific player on the game board.
     /// </summary>
-    /// <param name="player">The Player.</param>
-    /// <returns>
-    /// Return <c>true</c> if all pieces successfully assigned to board; 
-    /// otherwise, <c>false</c> if player don't have any pieces or current game status is not <see cref="GameStatus.NotReady"/>.
-    /// </returns>
+    /// <param name="player">The player whose pieces are to be set on the board.</param>
+    /// <returns>True if the pieces are successfully set; otherwise, false.</returns>
     public bool SetPieceToBoard(IPlayer player)
     {
-        if (_status != GameStatus.NotReady || _playerPieces.Count == 0)
+        if (GetStatus() != GameStatus.NotReady || !GetActivePlayer().Any())
+        {
+            _logger?.LogWarning("Attempt to set player {Player} pieces on the board failed", player);
             return false;
+        }
         
-        int nRowWithPieces = (GetBoardSize() - 2) / 2;
-        int startRow = (_playerPieces[player].First().Color == PieceColor.Blue) ? 0 : (GetBoardSize() - nRowWithPieces);
+        int boardSize = GetBoardSize();
+        int nRowWithPieces = (boardSize - 2) / 2;
+        int startRow = (_players[player].First().Color == PieceColor.Blue) ? 0 : (GetBoardSize() - nRowWithPieces);
+        int pieceCounter = 0, nextRow = 0;
         
-        int nextRow = 0, pieceCounter = 0;
-        foreach (Piece piece in _playerPieces[player])
+        foreach (Piece piece in _players[player])
         {
             int row = startRow + nextRow;
             int column = (row % 2 == 0) ? pieceCounter * 2 : pieceCounter * 2 + 1;
@@ -301,285 +360,317 @@ public class GameController
         
             if (column >= GetBoardSize() - 2 && row < GetBoardSize())
             {
-                pieceCounter = 0;
-                nextRow++;
+                pieceCounter = 0; nextRow++;
             }
         }
-
+        
+        _logger?.LogInformation("Attempt to set player {Player}'s pieces on the board is success", player);
         return true;
     }
     
     /// <summary>
-    /// Assign piece a position on the board (2D Array).
+    /// Sets a piece to the specified position on the game board.
     /// </summary>
-    /// <param name="piece">Piece selected.</param>
-    /// <param name="position">New position for the piece.</param>
-    /// <returns>Return <c>true</c> if piece successfully assigned to new location; otherwise, <c>false</c> if location is not empty (null).</returns>
+    /// <param name="piece">The piece to be set.</param>
+    /// <param name="position">The position on the board where the piece is to be set.</param>
+    /// <returns>True if the piece is successfully set; otherwise, false.</returns>
     private bool SetPieceToBoard(Piece piece, Position position)
     {
         return SetPieceToBoard(piece, position.Row, position.Column);
     }
     
     /// <summary>
-    /// Assign piece a position (coordinate X, Y) on the board (2D Array).
+    /// Sets a piece to the specified position on the game board.
     /// </summary>
-    /// <param name="piece">Piece selected.</param>
-    /// <param name="row">New row position (Y Coordinate).</param>
-    /// <param name="column">New column position (X Coordinate).</param>
-    /// <returns>Return <c>true</c> if piece successfully assigned to new location; otherwise, <c>false</c> if location is not empty (null).</returns>
+    /// <param name="piece">The piece to be set.</param>
+    /// <param name="row">The row index on the board where the piece is to be set.</param>
+    /// <param name="column">The column index on the board where the piece is to be set.</param>
+    /// <returns>True if the piece is successfully set; otherwise, false.</returns>
     private bool SetPieceToBoard(Piece piece, int row, int column)
     {
         if (GetPiece(row, column) != null)
+        {
+            _logger?.LogWarning("Position (row,column) ({Row},{Column}) is occupied by {Piece}", row, column, piece);
             return false;
+        }
         
         _board.Layout[row, column] = piece;
+        _logger?.LogInformation("Attempt to set {Piece} to (row,column) ({Row},{Column}) is success", piece, row, column);
         return true;
     }
     
     /// <summary>
-    /// Get all player's active pieces.
+    /// Gets all pieces on the game board.
     /// </summary>
-    /// <returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Piece"/>.</returns>
+    /// <returns>An enumerable of all pieces on the board.</returns>
     public IEnumerable<Piece> GetPieces()
     {
-        return _playerPieces.Values.SelectMany(playerPiece => playerPiece);
+        return _players.Values.SelectMany(playerPiece => playerPiece);
     }
     
     /// <summary>
-    /// Gets the pieces associated with the specified player.
+    /// Gets all pieces owned by a specific player.
     /// </summary>
     /// <param name="player">The player whose pieces are to be retrieved.</param>
-    /// <returns>
-    /// An <see cref="IEnumerable{T}"/> of <see cref="Piece"/> representing the pieces associated with the player.
-    /// If the player is not found, returns an empty collection.
-    /// </returns>
+    /// <returns>An enumerable of pieces owned by the player, or an empty enumerable if the player is not found.</returns>
     public IEnumerable<Piece> GetPieces(IPlayer player)
     {
-        if (_playerPieces.TryGetValue(player, out List<Piece>? pieces))
-            return pieces;
+        if (!_players.TryGetValue(player, out HashSet<Piece>? pieces))
+        {
+            _logger?.LogWarning("Attempt to get player {Player}'s pieces failed", player);
+            return Enumerable.Empty<Piece>();
+        }
         
-        return Enumerable.Empty<Piece>();
+        _logger?.LogInformation("Attempt to get player {Player}'s pieces is success", player);
+        return pieces;
     }
-    
+
     /// <summary>
-    /// Get piece from player <see cref="List{T}"/> of <see cref="Piece"/> based on the piece's ID number.
+    /// Gets a piece owned by a specific player with the specified ID.
     /// </summary>
-    /// <param name="player">The player.</param>
-    /// <param name="id">ID of the piece.</param>
-    /// <returns>
-    /// Return piece if the piece still on Player's <see cref="List{T}"/> of type <see cref="Piece"/>; otherwise null.</returns>
+    /// <param name="player">The player whose piece is to be retrieved.</param>
+    /// <param name="id">The ID of the piece to be retrieved.</param>
+    /// <returns>The piece with the specified ID owned by the player, or null if not found.</returns>
     public Piece? GetPiece(IPlayer player, int id)
     {
         Piece? selectedPiece = GetPlayerPieces(player).FirstOrDefault(piece => piece.Id == id);
+        if (selectedPiece == null)
+        {
+            _logger?.LogWarning("Attempt to get player {Player}'s piece with ID {Id} failed", player, id);
+        }
+        
+        _logger?.LogInformation("Attempt to get player {Player}'s piece with ID {Id} is success", player, id);
         return selectedPiece;
     }
     
     /// <summary>
-    /// Get piece from board based on their <see cref="Position"/> on the board.
+    /// Gets the piece at the specified position on the game board.
     /// </summary>
-    /// <param name="position">Piece's position on the board.</param>
-    /// <returns>Return the piece if the piece is on the board; otherwise null.</returns>
+    /// <param name="position">The position on the board where the piece is to be retrieved.</param>
+    /// <returns>The piece at the specified position, or null if no piece is found.</returns>
     public Piece? GetPiece(Position position)
     {
         return GetPiece(position.Row, position.Column);
     }
     
     /// <summary>
-    /// Select piece from board based on their coordinate (Y,X) on the board.
+    /// Gets the piece at the specified position on the game board.
     /// </summary>
-    /// <param name="row">Row (Y Coordinate).</param>
-    /// <param name="column">Column (X Coordinate).</param>
-    /// <returns>Return the piece if the piece is on the board; otherwise null.</returns>
+    /// <param name="row">The row index on the board where the piece is to be retrieved.</param>
+    /// <param name="column">The column index on the board where the piece is to be retrieved.</param>
+    /// <returns>The piece at the specified position, or null if no piece is found.</returns>
     public Piece? GetPiece(int row, int column)
     {
-        return _board.Layout[row, column];
-    }
-    
-    /// <summary>
-    /// Remove piece from player <see cref="List{T}"/> of <see cref="Piece"/> and board based on the piece's ID number.
-    /// </summary>
-    /// <param name="player">The player.</param>
-    /// <param name="id">ID of the piece.</param>
-    /// <returns>Return <c>true</c> if piece successfully removed; otherwise, <c>false</c>.</returns>
-    public bool RemovePiece(IPlayer player, int id)
-    {
-        Piece? piece = GetPiece(player, id);
+        Piece? piece = _board.Layout[row, column];
         if (piece == null)
-            return false;
+        {
+            _logger?.LogWarning("Attempt to get player's piece from (Row,Column) ({Row},{Column}) failed", row, column);
+        }
+        
+        _logger?.LogInformation("Attempt to get player's piece from (Row,Column) ({Row},{Column}) is success", row, column);
+        return piece;
+    }
 
+    /// <summary>
+    /// Removes a piece from player and game board.
+    /// </summary>
+    /// <param name="piece">The piece that will be removed</param>
+    /// <returns>True if the piece is successfully removed; otherwise, false.</returns>
+    public bool RemovePiece(Piece piece)
+    {
         Position? position = GetPosition(piece);
         if (position == null)
+        {
             return false;
+        }
         
-        return RemovePieceFromBoard(position) && RemovePieceFromPlayer(piece);
-    }
-    
-    /// <summary>
-    /// Remove piece from player <see cref="List{T}"/> of <see cref="Piece"/> and board based on their position on the board.
-    /// </summary>
-    /// <param name="position">Position of piece that will be removed.</param>
-    /// <returns>Return <c>true</c> if piece successfully removed; otherwise, <c>false</c>.</returns>
-    public bool RemovePiece(Position position)
-    {
-        return RemovePiece(position.Row, position.Column);
-    }
-    
-    /// <summary>
-    /// Remove piece from player <see cref="List{T}"/> of <see cref="Piece"/> and board based on their coordinate on the board.
-    /// </summary>
-    /// <param name="row">Row (Y Coordinate) of piece that will be removed</param>
-    /// <param name="column">Column (X Coordinate) of piece that will be removed</param>
-    /// <returns>Return <c>true</c> if piece successfully removed; otherwise, <c>false</c>.</returns>
-    public bool RemovePiece(int row, int column)
-    {
-        Piece? piece = GetPiece(row, column);
-        if (piece == null)
+        IPlayer? player = GetPlayerByPieces(piece);
+        if (player == null)
+        {
             return false;
+        }
         
-        return RemovePieceFromBoard(row, column) && RemovePieceFromPlayer(piece);
+        return RemovePieceFromBoard(position.Row, position.Column) && RemovePieceFromPlayer(player, piece);
     }
     
     /// <summary>
-    /// Remove piece from player based on their <see cref="Position"/> on the board.
+    /// Removes a piece at the specified position on the game board.
     /// </summary>
-    /// <param name="position">Piece's position on the board.</param>
-    /// <returns>Return <c>true</c> if successfully remove piece from board; otherwise, <c>false</c>.</returns>
+    /// <param name="position">The position on the board where the piece is to be removed.</param>
+    /// <returns>True if the piece is successfully removed; otherwise, false.</returns>
     private bool RemovePieceFromBoard(Position position)
     {
         return RemovePieceFromBoard(position.Row, position.Column);
     }
     
     /// <summary>
-    /// Remove piece from player based on their coordinate (Y,X) on the board.
+    /// Removes a piece at the specified position on the game board.
     /// </summary>
-    /// <param name="row">Row (Y Coordinate).</param>
-    /// <param name="column">Column (X Coordinate).</param>
-    /// <returns>Return <c>true</c> if successfully remove piece from board; otherwise, <c>false</c>.</returns>
+    /// <param name="row">The row index on the board where the piece is to be removed.</param>
+    /// <param name="column">The column index on the board where the piece is to be removed.</param>
+    /// <returns>True if the piece is successfully removed; otherwise, false.</returns>
     private bool RemovePieceFromBoard(int row, int column)
     {
         if (GetPiece(row, column) == null)
+        {
+            _logger?.LogWarning("Attempt to remove player piece from (row,column) ({Row},{Column}) failed", row, column);
             return false;
+        }
         
         _board.Layout[row, column] = null;
+        _logger?.LogInformation("Attempt to remove player piece from (row,column) ({Row},{Column}) is success", row, column);
         return true;
     }
     
     /// <summary>
-    /// Remove piece from players <see cref="List{T}"/> of <see cref="Piece"/> .
+    /// Removes a piece from a specific player's collection.
     /// </summary>
-    /// <param name="removedPiece">Piece that will be removed.</param>
-    /// <returns>Return <c>true</c> if piece successfully removed; otherwise, <c>false</c>.</returns>
-    private bool RemovePieceFromPlayer(Piece removedPiece)
+    /// <param name="player">The player whose piece is to be removed.</param>
+    /// <param name="removedPiece">The piece to be removed.</param>
+    /// <returns>True if the piece is successfully removed from the player's collection; otherwise, false.</returns>
+    private bool RemovePieceFromPlayer(IPlayer player, Piece removedPiece)
     {
-        IPlayer? matchingPlayer = GetActivePlayer().FirstOrDefault(player => _playerPieces[player].Any(piece => piece.Equals(removedPiece)));
-        if (matchingPlayer == null)
+        if (!_players[player].Remove(removedPiece))
+        {
+            _logger?.LogWarning("Attempt to remove player {Player}'s piece {Piece} failed", player, removedPiece);
             return false;
+        }
 
-        return _playerPieces[matchingPlayer].Remove(removedPiece);
+        _logger?.LogInformation("Attempt to remove player {Player}'s piece {Piece} is success", player, removedPiece);
+        return true;
     }
     
     /// <summary>
-    /// Count all active pieces (player and enemy combined) on the board.
+    /// Counts the number of pieces currently on the game board.
     /// </summary>
-    /// <returns>Return number of active piece.</returns>
+    /// <returns>The number of pieces on the board.</returns>
     public int CountPieceOnBoard()
     {
         int count = 0;
+        
         for (int i = 0; i < GetBoardSize(); i++)
         {
             for (int j = 0; j < GetBoardSize(); j++)
             {
                 if (GetPiece(i, j) != null)
+                {
                     count++;
+                }
             }
         }
+        
+        _logger?.LogInformation("Attempt to get number of pieces on board is success: {Count}", count);
         return count;
     }
     
     /// <summary>
-    /// Calculate the maximum number of pieces on the board for each player.
+    /// Calculates the maximum number of pieces each player can have based on the current board size.
     /// </summary>
-    /// <returns>Maximum number of pieces for each player.</returns>
+    /// <returns>The maximum number of pieces each player can have.</returns>
     public int MaxPlayerPieces()
     {
-        return GetBoardSize() * (GetBoardSize() - 2) / 4 + (GetBoardSize() % 2);
+        int maxPieces = GetBoardSize() * (GetBoardSize() - 2) / 4 + (GetBoardSize() % 2);
+        
+        _logger?.LogInformation("Attempt to get max number of pieces on player is success: {NPieces}", maxPieces);
+        return maxPieces;
     }
     #endregion
     
     #region Check Valid Movement
     /// <summary>
-    /// Find piece position on the board.
+    /// Gets the position of a specific piece on the game board.
     /// </summary>
-    /// <param name="piece">Piece that will be searched.</param>
-    /// <returns>Return <see cref="Position"/> of the piece; Otherwise, null if piece not found on the board.</returns>
+    /// <param name="piece">The piece for which the position is to be retrieved.</param>
+    /// <returns>
+    /// The position of the piece on the board, or null if the piece is not found.
+    /// </returns>
     public Position? GetPosition(Piece piece)
     {
         for (int i = 0; i < GetBoardSize(); i++)
         {
             for (int j = 0; j < GetBoardSize(); j++)
             {
-                Piece? pieceOnBoard = GetPiece(i, j);
-                if (pieceOnBoard == null)
+                if (!piece.Equals(GetPiece(i, j)))
+                {
                     continue;
-                
-                if (pieceOnBoard.Equals(piece))
-                    return new Position(i, j);
+                }
+                  
+                _logger?.LogInformation("Piece {Piece} found at (Row,Column) ({Row},{Column})", piece, i, j);
+                return new Position(i, j);
             }
         }
         
+        _logger?.LogWarning("Piece {Piece} not found on the board", piece);
         return null;
     }
     
     /// <summary>
-    /// Get all possible move from player pieces (including standard move and jump move).
+    /// Gets all possible moves for every piece owned by a specific player.
     /// </summary>
-    /// <param name="player">Player that will be checked.</param>
-    ///<returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Position"/> for all piece of the player.</returns>
+    /// <param name="player">The player for whom to retrieve possible moves.</param>
+    /// <returns>
+    /// An enumerable of positions representing all possible moves for the player's pieces.
+    /// </returns>
     public IEnumerable<Position> GetPossibleMoves(IPlayer player)
     {
-        return _playerPieces[player].SelectMany(piece => GetPossibleMoves(piece));
+        _logger?.LogInformation("Get all possible moves for every pieces player {Player} own", player);
+        return _players[player].SelectMany(piece => GetPossibleMoves(piece));
     }
 
     /// <summary>
-    /// Get all possible move of selected piece .
+    /// Gets possible moves for a specific piece on the game board.
     /// </summary>
-    /// <param name="piece">Selected piece that will be checked</param>
-    /// <param name="firstMove">when <c>true</c> all possible move will be checked; otherwise, when <c>false</c> only jump move will be checked</param>
-    /// <returns>Returns <see cref="IEnumerable{T}"/> of type <see cref="Position"/> for selected piece.</returns>
+    /// <param name="piece">The piece for which to retrieve possible moves.</param>
+    /// <param name="firstMove">Flag indicating whether it's the first move of the piece (default is true).</param>
+    /// <returns>
+    /// An enumerable of positions representing possible moves for the piece.
+    /// </returns>  
     public IEnumerable<Position> GetPossibleMoves(Piece piece, bool firstMove = true)
     {
         List<Position> possibleMoves = new List<Position>();
 
         Position? piecePos = GetPosition(piece);
         if (piecePos == null)
+        {
+            _logger?.LogWarning("Attempt to obtained piece {Piece}'s possible moves failed", piece);
             return Enumerable.Empty<Position>();
-
+        }
+        
         for (int row = -1; row <= 1; row++)
         {
             for (int column = -1; column <= 1; column++)
             {
                 if (row == 0 || column == 0)
+                {
                     continue;
-
+                }
+                
                 if (!CanMoveBackward(piece))
                 {
                     int skippedRow = (piece.Color == PieceColor.Blue) ? -1 : 1;
                     if (row == skippedRow)
+                    {
                         continue;
+                    }
                 }
 
                 int targetRow = piecePos.Row + row;
                 int targetColumn = piecePos.Column + column;
                 if (!WithinBoundaries(targetRow, targetColumn))
+                {
                     continue;
+                }
                 
                 // Check possible single tile and jump move
                 Piece? enemyPiece = GetPiece(targetRow, targetColumn);
                 if (enemyPiece == null)
                 {
                     if (!firstMove)
+                    {
                         continue;
-
+                    }
+                    
+                    _logger?.LogInformation("Adding piece {Piece}'s possible move: (Row,Column) ({Row},{Column})", piece, targetRow, targetColumn);
                     possibleMoves.Add(new Position(targetRow, targetColumn));
                 }
                 else if (enemyPiece.Color != piece.Color)
@@ -587,92 +678,139 @@ public class GameController
                     int jumpRow = targetRow + row;
                     int jumpColumn = targetColumn + column;
                     if (!IsValidMove(jumpRow, jumpColumn))
+                    {
                         continue;
+                    }
                     
+                    _logger?.LogInformation("Adding piece {Piece}'s possible move: (Row,Column) ({Row},{Column})", piece, jumpRow, jumpColumn);
                     possibleMoves.Add(new Position(jumpRow, jumpColumn));
                 }
             }
         }
+        
+        _logger?.LogInformation("Successfully obtained piece {Piece}'s possible move", piece);
         return possibleMoves;
     }
     
     /// <summary>
-    /// Check if the piece can move backward.
+    /// Determines whether a piece can move backward.
     /// </summary>
-    /// <param name="piece">Selected piece.</param>
-    /// <returns>Return <c>true</c> if piece is <see cref="PieceStatus.King"/>; otherwise, <c>false</c> if piece is <see cref="PieceStatus.Regular"/></returns>
+    /// <param name="piece">The piece to check.</param>
+    /// <returns>
+    /// True if the piece can move backward; otherwise, false.
+    /// </returns>
     private bool CanMoveBackward(Piece piece)
     {
         return (piece.Status == PieceStatus.King);
     }
     
     /// <summary>
-    /// Check if piece can be moved here.
+    /// Determines whether a move to the specified position is valid.
     /// </summary>
-    /// <param name="toRow">Y Coordinate that will be checked</param>
-    /// <param name="toColumn">X Coordinate that will be checked</param>
-    /// <returns></returns>
+    /// <param name="toRow">The target row index.</param>
+    /// <param name="toColumn">The target column index.</param>
+    /// <returns>
+    /// True if the move is valid (within board boundaries and the target position is empty);
+    /// otherwise, false.
+    /// </returns>
     private bool IsValidMove(int toRow, int toColumn)
     {
         if (!WithinBoundaries(toRow, toColumn))
+        {
+            _logger?.LogWarning("New position (row,column) ({Row},{Column}) is out of board boundaries", toRow, toColumn);
             return false;
+        }
 
-        return GetPiece(toRow, toColumn) == null;
+        if (GetPiece(toRow, toColumn) != null)
+        {
+            return false;
+        }
+        
+        _logger?.LogInformation("Piece can be moved to (row,column) ({Row},{Column})", toRow, toColumn);
+        return true;
     }
     
     /// <summary>
-    /// Check if new piece coordinate is still on board boundaries.
+    /// Determines whether the specified position is within the board boundaries.
     /// </summary>
-    /// <param name="row">Row (Y Coordinate).</param>
-    /// <param name="column">Column (X Coordinate).</param>
-    /// <returns></returns>
+    /// <param name="row">The row index.</param>
+    /// <param name="column">The column index.</param>
+    /// <returns>
+    /// True if the position is within the board boundaries; otherwise, false.
+    /// </returns>
     private bool WithinBoundaries(int row, int column)
     {
-        return (row >= 0 && row < GetBoardSize()) && (column >= 0 && column < GetBoardSize());
+        if ((row >= 0 && row < GetBoardSize()) && (column >= 0 && column < GetBoardSize()))
+        {
+            _logger?.LogInformation("New position (row,column) ({Row},{Column}) is in board boundaries", row, column);
+            return true;
+        }
+        
+        _logger?.LogWarning("New position (row,column) ({Row},{Column}) is out of board boundaries", row, column);
+        return false;
     }
     #endregion
     
     #region Move & Promote Piece
     /// <summary>
-    /// Move piece to new position.
+    /// Moves a piece from the specified source position to the target position.
     /// </summary>
-    /// <param name="source">Selected piece position.</param>
-    /// <param name="target">Selected piece new position.</param>
-    /// <param name="firstMove">true if this is the first piece movement, false if this is the second or more jump movements.</param>
-    /// <returns>Return true if piece moved successfully; otherwise, return false.</returns>
+    /// <param name="source">The source position of the piece.</param>
+    /// <param name="target">The target position to move the piece to.</param>
+    /// <param name="firstMove">Flag indicating whether it's the first move of the piece (default is true).</param>
+    /// <returns>
+    /// True if the piece is successfully moved; otherwise, false.
+    /// </returns>
     public bool MovePiece(Position source, Position target, in bool firstMove = true)
     {
         Piece? piece = GetPiece(source);
         if (piece == null)
+        {
+            _logger?.LogWarning("Attempt to move piece from {Position} to {Position} failed", source, target);
             return false;
-
+        }
+        
         return MovePiece(piece, target, firstMove);
     }
     
     /// <summary>
-    /// Move selected piece to new position
+    /// Moves a specific piece to the target position.
     /// </summary>
-    /// <param name="piece">Piece that will be moved.</param>
-    /// <param name="target">New piece target position.</param>
-    /// <param name="firstMove">true if this is the first piece movement, false if this is the second or more jump movements.</param>
-    /// <returns>Return true if piece moved successfully; otherwise, return false.</returns>
+    /// <param name="piece">The piece to be moved.</param>
+    /// <param name="target">The target position to move the piece to.</param>
+    /// <param name="firstMove">Flag indicating whether it's the first move of the piece (default is true).</param>
+    /// <returns>
+    /// True if the piece is successfully moved; otherwise, false.
+    /// </returns>
     public bool MovePiece(Piece piece, Position target, in bool firstMove = true)
     {
         if (!ValidateNewPosition(piece, target, firstMove))
+        {
+            _logger?.LogWarning("Attempt to move piece {Piece} to {Position} failed", piece, target);
             return false;
+        }
         
         Position? source = GetPosition(piece);
         if (source == null)
+        {
+            _logger?.LogWarning("Attempt to move piece {Piece} to {Position} failed", piece, target);
             return false;
+        }
 
         if (!SetPieceToBoard(piece, target))
+        {
             return false;
+        }
 
         if (!RemovePieceFromBoard(source))
+        {
             return false;
+        }
         
         if (IsJumpMove(source, target))
+        {
             CapturePieceInBetween(source, target);
+        }
         
         OnMovePiece(piece, target);
         SetGameStatus(GameStatus.OnGoing);
@@ -681,28 +819,33 @@ public class GameController
     }
 
     /// <summary>
-    /// Validates whether the specified <paramref name="target"/> position is a valid move for the given <paramref name="piece"/>.
+    /// Validates whether the new position for the piece is valid.
     /// </summary>
-    /// <param name="piece">The piece for which the move is being validated.</param>
-    /// <param name="target">The target position to be validated.</param>
-    /// <param name="firstMove">A boolean value indicating whether it is the first move of the piece (default is <c>true</c>)</param>
+    /// <param name="piece">The piece to be moved.</param>
+    /// <param name="target">The target position to move the piece to.</param>
+    /// <param name="firstMove">Flag indicating whether it's the first move of the piece (default is true).</param>
     /// <returns>
-    ///   <c>true</c> if the move to the <paramref name="target"/> position is valid; otherwise, <c>false</c>.
+    /// True if the new position is valid; otherwise, false.
     /// </returns>
     private bool ValidateNewPosition(Piece piece, Position target, in bool firstMove = true)
     {
-        return GetPossibleMoves(piece, firstMove).Any(position => 
-            position.Row == target.Row && position.Column == target.Column);
+        if (!GetPossibleMoves(piece, firstMove).Any(pos => pos.Row == target.Row && pos.Column == target.Column))
+        {
+            _logger?.LogWarning("Piece {Piece} can't be moved to {Position}", piece, target);
+            return false;
+        }
+        
+        _logger?.LogInformation("Piece {Piece} can be moved to {Position}", piece, target);
+        return true;
     }
     
     /// <summary>
-    /// Determines whether a move from the specified <paramref name="source"/> to <paramref name="target"/>
-    /// is a jump move, involving a piece moving two rows and two columns.
+    /// Checks if the move is a jump move (capturing an opponent's piece).
     /// </summary>
-    /// <param name="source">The source position from which the capture is initiated.</param>
-    /// <param name="target">The target position where the capturing piece moves.</param>
+    /// <param name="source">The source position of the move.</param>
+    /// <param name="target">The target position of the move.</param>
     /// <returns>
-    ///   <c>true</c> if the move is a jump move; otherwise, <c>false</c>.
+    /// True if the move is a jump move; otherwise, false.
     /// </returns>
     private bool IsJumpMove(Position source, Position target)
     {
@@ -713,12 +856,12 @@ public class GameController
     }
     
     /// <summary>
-    /// Captures a piece located in between the last position and new position.
+    /// Captures the piece that is in between the source and target positions.
     /// </summary>
-    /// <param name="source">The source position from which the capture is initiated.</param>
-    /// <param name="target">The target position where the capturing piece moves.</param>
+    /// <param name="source">The source position of the move.</param>
+    /// <param name="target">The target position of the move.</param>
     /// <returns>
-    ///   <c>true</c> if a piece is successfully captured and removed; otherwise, <c>false</c>.
+    /// True if the piece in between is successfully captured; otherwise, false.
     /// </returns>
     private bool CapturePieceInBetween(Position source, Position target)
     {
@@ -727,78 +870,151 @@ public class GameController
 
         Piece? capturedPiece = GetPiece(captureRow, captureColumn);
         if (capturedPiece == null)
+        {
+            _logger?.LogWarning("Attempt to capture piece between Position {Source} and {Target} failed", source, target);
             return false;
+        }
+
+        if (!RemovePiece(capturedPiece))
+        {
+            return false;
+        }
         
         OnCapturePiece(capturedPiece);
-        return RemovePiece(captureRow, captureColumn);
+        return true;
     }
     
     /// <summary>
-    /// Promotes a specified <paramref name="piece"/> to the status of a <see cref="PieceStatus.King"/> if it is eligible for promotion.
+    /// Promotes a piece to the king status if it reaches the opposite end of the board.
     /// </summary>
     /// <param name="piece">The piece to be promoted.</param>
     /// <returns>
-    ///   <c>true</c> if the piece is successfully promoted; otherwise, <c>false</c>.
+    /// True if the piece is successfully promoted; otherwise, false.
     /// </returns>
     public bool PromotePiece(Piece piece)
     {
-        if (!CanPromotePiece(piece))
+        Position? position = GetPosition(piece);
+        if (position == null)
+        {
+            _logger?.LogWarning("Attempt to promote Piece {Piece} failed", piece);
             return false;
-
-        piece.Status = PieceStatus.King;
-        return PromotePieceFromPlayer(piece);
-    }
-    /// <summary>
-    /// Determines whether a specified <paramref name="piece"/> is eligible for promotion.
-    /// </summary>
-    /// <param name="piece">The piece to check for promotion eligibility.</param>
-    /// <returns>
-    ///   <c>true</c> if the piece is eligible for promotion; otherwise, <c>false</c>.
-    /// </returns>
-    private bool CanPromotePiece(Piece piece)
-    {
-        Position? piecePos = GetPosition(piece);
-        if (piecePos == null)
-            return false;
+        }
         
-        int endRow = (GetPiece(piecePos)!.Color == PieceColor.Blue) ? (GetBoardSize() - 1) : 0;
-        if (piecePos.Row != endRow)
+        IPlayer? player = GetPlayerByPieces(piece);
+        if (player == null)
+        {
+            _logger?.LogWarning("Attempt to promote Piece {Piece} failed", piece);
             return false;
-
+        }
+        
+        if (!CanPromotePiece(piece, position))
+        {
+            _logger?.LogWarning("Attempt to promote Piece {Piece} failed", piece);
+            return false;
+        }
+        
+        if (!PromotePieceFromPlayer(player, piece) || !PromotePieceFromBoard(position))
+        {
+            _logger?.LogWarning("Attempt to promote Piece {Piece} failed", piece);
+            return false;
+        }
+        
+        _logger?.LogInformation("Attempt to promote Piece {Piece} is success", piece);
         return true;
     }
+
     /// <summary>
-    /// Promotes a specified <paramref name="piece"/> to the status of a king.
+    /// Checks if a piece can be promoted based on its position.
     /// </summary>
+    /// <param name="piece">The piece to be checked for promotion.</param>
+    /// <param name="position">The position of the piece on the board.</param>
+    /// <returns>
+    /// True if the piece can be promoted; otherwise, false.
+    /// </returns>
+    private bool CanPromotePiece(Piece piece, Position position)
+    {
+        int endRow = (piece.Color == PieceColor.Blue) ? (GetBoardSize() - 1) : 0;
+        if (position.Row != endRow)
+        {
+            _logger?.LogWarning("Piece {Piece} can't be promoted", piece);
+            return false;
+        }
+        
+        _logger?.LogInformation("Piece {Piece} can be promoted", piece);
+        return true;
+    }
+
+    /// <summary>
+    /// Promotes a piece in the player's collection to the king status.
+    /// </summary>
+    /// <param name="player">The player who owns the piece.</param>
     /// <param name="piece">The piece to be promoted.</param>
     /// <returns>
-    ///   <c>true</c> if the piece is successfully promoted; otherwise, <c>false</c>.
+    /// True if the piece is successfully promoted; otherwise, false.
     /// </returns>
-    private bool PromotePieceFromPlayer(Piece piece)
+    private bool PromotePieceFromPlayer(IPlayer player, Piece piece)
     {
-        IEnumerable<Piece> pieces = GetPieces();
-        Piece? promotedPiece = pieces.FirstOrDefault(playerPiece => playerPiece.Equals(piece));
+        Piece? promotedPiece = GetPiece(player, piece.Id);
         if (promotedPiece == null)
-            return false;
+        {
+            _logger?.LogWarning("Attempt to promote player {Player}'s piece {Piece} failed", player, piece);
+            return false;   
+        }
         
         promotedPiece.Status = PieceStatus.King;
         OnPromotePiece(promotedPiece);
+        return true;
+    }
+    
+    /// <summary>
+    /// Promotes a piece on the board to the king status.
+    /// </summary>
+    /// <param name="position">The position of the piece on the board.</param>
+    /// <returns>
+    /// True if the piece is successfully promoted; otherwise, false.
+    /// </returns>
+    private bool PromotePieceFromBoard(Position position)
+    {
+        return PromotePieceFromBoard(position.Row, position.Column);
+    }
+    
+    /// <summary>
+    /// Promotes a piece on the board to the king status.
+    /// </summary>
+    /// <param name="row">The row index of the piece on the board.</param>
+    /// <param name="column">The column index of the piece on the board.</param>
+    /// <returns>
+    /// True if the piece is successfully promoted; otherwise, false.
+    /// </returns>
+    private bool PromotePieceFromBoard(int row, int column)
+    {
+        Piece? piece = GetPiece(row, column);
+        if (piece == null)
+        {
+            _logger?.LogWarning("Attempt to promote player piece from (row,column) ({Row},{Column}) failed", row, column);
+            return false;
+        }
+        
+        piece.Status = PieceStatus.King;
         return true;
     }
     #endregion
     
     #region Game Status
     /// <summary>
-    /// Sets the current status of the game to the specified <paramref name="status"/>.
+    /// Sets the game status to the specified status.
     /// </summary>
-    /// <param name="status">The new <see cref="GameStatus"/> to set.</param>
+    /// <param name="status">The new game status to set.</param>
     /// <returns>
-    ///   <c>true</c> if the game status is successfully set; otherwise, <c>false</c>.
+    /// True if the game status is successfully set; otherwise, false.
     /// </returns>
     private bool SetGameStatus(GameStatus status)
     {
         if (status == _status)
+        {
+            _logger?.LogWarning("Attempt to change game status to {Status} failed", status);
             return false;
+        }
         
         _status = status;
         OnChangeStatus(status);
@@ -807,97 +1023,112 @@ public class GameController
     }
     
     /// <summary>
-    /// Retrieves the current status of the game.
+    /// Gets the current game status.
     /// </summary>
-    /// <returns>
-    ///   The current <see cref="GameStatus"/> of the game.
-    /// </returns>
-    /// <remarks>
-    /// The method returns the current status of the game, indicating whether it is NotReady, Ready, OnGoing, or GameOver.
-    /// </remarks>
+    /// <returns>The current game status.</returns>
     public GameStatus GetStatus()
     {
         return _status;
     }
     
     /// <summary>
-    /// Starts the game, setting it to the ready state and initializing the first player's turn.
+    /// Starts a new game session.
     /// </summary>
     /// <returns>
-    ///   <c>true</c> if the game is successfully started; otherwise, <c>false</c>.
+    /// True if the game session is successfully started; otherwise, false.
     /// </returns>
     public bool Start()
     {
-        if (_playerPieces.Count < 2 || _status != GameStatus.NotReady)
+        if (GetActivePlayer().Count() < 2 || _status != GameStatus.NotReady)
+        {
+            _logger?.LogWarning("Attempt to start new game session failed");
             return false;
-        
-        return SetGameStatus(GameStatus.Ready) && SetCurrentPlayer(_playerPieces.Keys.First());
+        }
+            
+        _logger?.LogInformation("Attempt to start new game session is success");
+        return SetGameStatus(GameStatus.Ready) && SetCurrentPlayer(_players.Keys.First());
     }
     
     /// <summary>
-    /// Checks if the game is over by determining if any player has eliminated all their enemy pieces.
+    /// Checks if the game is over by determining if any player has no pieces left.
     /// </summary>
     /// <returns>
-    ///   <c>true</c> if the game is over; otherwise, <c>false</c>.
+    /// True if the game is over; otherwise, false.
     /// </returns>
     public bool GameOver()
     {
-        if (_playerPieces.Keys.FirstOrDefault(player => _playerPieces[player].Count == 0) != null)
+        if (_players.Keys.FirstOrDefault(player => _players[player].Count == 0) != null)
+        {
+            _logger?.LogInformation("One of the player have no pieces left. Game is over");
             return SetGameStatus(GameStatus.GameOver);
-
+        }
+        
         return false;
     }
     
     /// <summary>
-    /// Retrieves the player who has won the game by eliminating all enemy pieces.
+    /// Gets the winner of the game.
     /// </summary>
     /// <returns>
-    ///   The winning player if the game is over and a winner is found; otherwise, returns <c>null</c>.
+    /// The player who is the winner, or null if the game is not over or there is no winner.
     /// </returns>
     public IPlayer? GetWinner()
     {
         if (GameOver())
-            return _playerPieces.Keys.FirstOrDefault(player => _playerPieces[player].Count != 0);
+        {
+            IPlayer? winner = _players.Keys.FirstOrDefault(player => _players[player].Count != 0);
+            if (winner != null)
+            {
+                _logger?.LogInformation("The game winner is player {Player}", winner);
+                return winner;
+            }
+        }
         
+        _logger?.LogWarning("Attempt to get  game winner is failed");
         return null;
     }
     
     /// <summary>
-    /// Advances the game to the next turn, changing the current player.
+    /// Advances the game to the next turn.
     /// </summary>
     /// <returns>
-    ///   <c>true</c> if the next turn is successfully set; otherwise, <c>false</c>.
+    /// True if the turn is successfully advanced; otherwise, false.
     /// </returns>
     public bool NextTurn()
     {
         if (_currentPlayer == null)
+        {
+            _logger?.LogWarning("Attempt to advances game turn failed");
             return false;
+        }
         
-        int currentIndex = _playerPieces.Keys.ToList().IndexOf(_currentPlayer);
+        int currentIndex = _players.Keys.ToList().IndexOf(_currentPlayer);
         
-        int nextIndex = (currentIndex + 1) % _playerPieces.Count;
+        int nextIndex = (currentIndex + 1) % _players.Count;
         
-        IPlayer nextPlayer = _playerPieces.Keys.ElementAt(nextIndex);
+        IPlayer nextPlayer = _players.Keys.ElementAt(nextIndex);
         
+        _logger?.LogInformation("Attempt to advances game turn is success");
         return SetCurrentPlayer(nextPlayer);
     }
     
     /// <summary>
-    /// Allows a player to resign from the game.
+    /// Allows a player to resign from the game by clearing their pieces.
     /// </summary>
-    /// <param name="player">The player who wants to resign.</param>
+    /// <param name="player">The player who is resigning.</param>
     /// <returns>
-    ///   <c>true</c> if the player successfully resigns; otherwise, <c>false</c>.
+    /// True if the player resigns successfully; otherwise, false.
     /// </returns>
     public bool Resign(IPlayer player)
     {
-        if (GetStatus() != GameStatus.OnGoing || GetStatus() != GameStatus.Ready)
+        if (GetStatus() != GameStatus.OnGoing || GetStatus() != GameStatus.Ready || !IsPlayerValid(player))
+        {
+            _logger?.LogWarning("Attempt to resign by player {Player} failed", player);
             return false;
-
-        if (!IsPlayerValid(player))
-            return false;
+        }
         
-        _playerPieces[player].Clear();
+        _players[player].Clear();
+        _logger?.LogInformation("Attempt to resign by player {Player} is success", player);
         return true;
     }
     #endregion
