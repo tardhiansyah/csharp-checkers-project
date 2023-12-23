@@ -101,16 +101,19 @@ public static class Program
                 if (currentNPiece != lastNPiece)
                 {
                     validMovePositions = checkers.GetPossibleMoves(selectedPiece, firstMove).ToList();
+                    lastNPiece = currentNPiece;
                     continue;
                 }
                 break;
             }
             
             checkers.PromotePiece(selectedPiece);
-            lastNPiece = currentNPiece;
             selectedPiece = null;
             checkers.NextTurn();
         }
+        
+        Console.Clear();
+        ShowBoard(checkers, validMovePositions);
     }
     #endregion
     
