@@ -437,6 +437,7 @@ public class GameController
         if (selectedPiece == null)
         {
             _logger?.LogWarning("Attempt to get player {Player}'s piece with ID {Id} failed", player, id);
+            return null;
         }
         
         _logger?.LogInformation("Attempt to get player {Player}'s piece with ID {Id} is success", player, id);
@@ -461,14 +462,7 @@ public class GameController
     /// <returns>The piece at the specified position, or null if no piece is found.</returns>
     public Piece? GetPiece(int row, int column)
     {
-        Piece? piece = _board.Layout[row, column];
-        if (piece == null)
-        {
-            _logger?.LogWarning("Attempt to get player's piece from (Row,Column) ({Row},{Column}) failed", row, column);
-        }
-        
-        _logger?.LogInformation("Attempt to get player's piece from (Row,Column) ({Row},{Column}) is success", row, column);
-        return piece;
+        return _board.Layout[row, column];
     }
 
     /// <summary>
@@ -625,8 +619,13 @@ public class GameController
     /// <returns>
     /// An enumerable of positions representing possible moves for the piece.
     /// </returns>  
-    public IEnumerable<Position> GetPossibleMoves(Piece piece, bool firstMove = true)
+    public IEnumerable<Position> GetPossibleMoves(Piece? piece, bool firstMove = true)
     {
+        if (piece == null)
+        {
+            return Enumerable.Empty<Position>();
+        }
+        
         List<Position> possibleMoves = new List<Position>();
 
         Position? piecePos = GetPosition(piece);
@@ -814,7 +813,6 @@ public class GameController
         
         OnMovePiece(piece, target);
         SetGameStatus(GameStatus.OnGoing);
-        
         return true;
     }
 
@@ -1018,7 +1016,6 @@ public class GameController
         
         _status = status;
         OnChangeStatus(status);
-        
         return true;
     }
     
@@ -1057,10 +1054,11 @@ public class GameController
     /// </returns>
     public bool GameOver()
     {
-        if (_players.Keys.FirstOrDefault(player => _players[player].Count == 0) != null)
+        if (GetActivePlayer().FirstOrDefault(player => !GetPieces(player).Any()) != null)
         {
             _logger?.LogInformation("One of the player have no pieces left. Game is over");
-            return SetGameStatus(GameStatus.GameOver);
+            SetGameStatus(GameStatus.GameOver);
+            return true;
         }
         
         return false;
@@ -1076,7 +1074,7 @@ public class GameController
     {
         if (GameOver())
         {
-            IPlayer? winner = _players.Keys.FirstOrDefault(player => _players[player].Count != 0);
+            IPlayer? winner = GetActivePlayer().FirstOrDefault(player => GetPieces(player).Count() != 0);
             if (winner != null)
             {
                 _logger?.LogInformation("The game winner is player {Player}", winner);

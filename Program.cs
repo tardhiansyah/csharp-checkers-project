@@ -3,81 +3,118 @@ using System.Text.RegularExpressions;
 using CheckersGame.Class;
 using CheckersGame.Enumeration;
 using CheckersGame.Interface;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using NLog.Extensions.Logging;
 
 namespace CheckersGame;
 
-static class Program
+public static class Program
 {
-       
     #region Main
     static void Main()
     {
-        GameController checkers = new();
+        GameController checkers = SetupGameController();
+
+        SubscribeToEvents(checkers);
+        
+        SetupDisplay(checkers);
+
+        PlayGame(checkers);
+        
+        ShowTheWinner(checkers);
+        
+        Console.ReadLine();
+    }
+
+    static GameController SetupGameController()
+    {
+        // Dependency Injection for creating new GameController
+        var serviceCollection = new ServiceCollection();
+        ConfigureServices(serviceCollection);
+        
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        return serviceProvider.GetRequiredService<GameController>();
+    }
+    static void ConfigureServices(IServiceCollection services)
+    {
+        services.AddLogging(builder =>
+        {
+            builder.ClearProviders();
+            builder.SetMinimumLevel(LogLevel.Information);
+            builder.AddNLog("nlog.config");
+        });
+        services.AddTransient<GameController>();
+    }
+    static void SubscribeToEvents(GameController checkers)
+    {
         checkers.PieceCaptured += HandlePieceCaptured;
         checkers.PieceMoved += HandlePieceMoved;
         checkers.PiecePromoted += HandlePiecePromoted;
         checkers.PlayerAdded += HandlePlayerAdded;
-        
-        SetupDisplay(checkers);
-        bool started = checkers.Start();
-        
+        checkers.CurrentPlayerChanged += HandleCurrentPlayerChanged;
+        checkers.StatusChanged += HandleGameStatusChanged;
+    }
+    static void PlayGame(GameController checkers)
+    {
         Piece? selectedPiece = null;
-        int lastPieceCount = checkers.CountPieceOnBoard();
+        List<Position> validMovePositions = new List<Position>();
+        int currentNPiece = checkers.CountPieceOnBoard();
+        int lastNPiece = currentNPiece;
         bool firstMove = true;
-        
+    
+        bool started = checkers.Start();
         while (started && !checkers.GameOver())
         {
-            Console.Clear();
-            IPlayer firstPlayer = checkers.GetActivePlayer().First();
-            IPlayer secondPlayer = checkers.GetActivePlayer().Last();
+            IPlayer currentPlayer = checkers.GetCurrentPlayer()!;
+            int remainingPlayerPieces = checkers.GetPlayerPieces(currentPlayer).Count();
             
-            PrintPlayerInfo(firstPlayer, checkers.GetPlayerPieces(firstPlayer).Count());
-            PrintBoard(checkers, selectedPiece, firstMove);
-            PrintPlayerInfo(secondPlayer, checkers.GetPlayerPieces(secondPlayer).Count());
-            PrintCurrentPlayerInfo(checkers.GetCurrentPlayer()!);
-
             if (selectedPiece == null)
             {
-                selectedPiece = SelectPiece(checkers);
-                Console.Clear();
-                PrintPlayerInfo(firstPlayer, checkers.GetPlayerPieces(firstPlayer).Count());
-                PrintBoard(checkers, selectedPiece, firstMove);
-                PrintPlayerInfo(secondPlayer, checkers.GetPlayerPieces(secondPlayer).Count());
-                PrintCurrentPlayerInfo(checkers.GetCurrentPlayer()!);   
-            }
-            PrintSelectedPiece(selectedPiece);
-            
-            while (true)
-            {
-                Position newPosition = SelectPosition(checkers);
-                
-                if (!checkers.MovePiece(selectedPiece, newPosition, firstMove))
-                    Console.WriteLine("\u001b[31mInvalid move!\u001b[0m");
-                else
-                    break;
-            }
-            
-            // Check if jump / kill move
-            int currentPieceCount = checkers.CountPieceOnBoard();
-            if (currentPieceCount == lastPieceCount || !checkers.GetPossibleMoves(selectedPiece, false).Any())
-            {
-                checkers.PromotePiece(selectedPiece);
-                lastPieceCount = currentPieceCount;
-                selectedPiece = null;
                 firstMove = true;
-                checkers.NextTurn();   
-            }
-            else
-            {
-                firstMove = false;
+                validMovePositions.Clear();
+                
+                Console.Clear();
+                ShowBoard(checkers, validMovePositions);
+                ShowPlayerInformation(currentPlayer, remainingPlayerPieces);
+                
+                selectedPiece = SelectPiece(checkers);
+                validMovePositions = checkers.GetPossibleMoves(selectedPiece, firstMove).ToList();
             }
             
-            Console.ReadKey(false);
+            while (validMovePositions.Count != 0)
+            {
+                Console.Clear();
+                ShowBoard(checkers, validMovePositions);
+                ShowPlayerInformation(currentPlayer, remainingPlayerPieces);
+                ShowSelectedPiece(selectedPiece);
+                
+                Position newPosition = SelectPosition(checkers);
+                if (!checkers.MovePiece(selectedPiece, newPosition, firstMove))
+                {
+                    Console.WriteLine("\u001b[31mInvalid move!\u001b[0m");
+                    continue;
+                }
+                firstMove = false;
+                
+                currentNPiece = checkers.CountPieceOnBoard();
+                if (currentNPiece != lastNPiece)
+                {
+                    validMovePositions = checkers.GetPossibleMoves(selectedPiece, firstMove).ToList();
+                    continue;
+                }
+                break;
+            }
+            
+            checkers.PromotePiece(selectedPiece);
+            lastNPiece = currentNPiece;
+            selectedPiece = null;
+            checkers.NextTurn();
         }
-        Console.Clear();
-        PrintWinner(checkers);
-        Console.ReadLine();
     }
+    #endregion
+    
+    #region User Input
     static Piece SelectPiece(GameController checkers)
     {
         IPlayer? currentPlayer = checkers.GetCurrentPlayer();
@@ -155,13 +192,7 @@ static class Program
     #endregion
     
     #region Printing Board and Information
-    static void PrintCurrentPlayerInfo(IPlayer player)
-    {
-        Console.ForegroundColor = (player.Id == 1) ? ConsoleColor.Blue : ConsoleColor.Red;
-        Console.WriteLine($"PLAYER {player.Id} TURN!");
-        Console.ResetColor();
-    }
-    static void PrintPlayerInfo(IPlayer player, int remainingPieces)
+    static void ShowPlayerInformation(IPlayer player, int remainingPieces)
     {
         PieceColor color = (player.Id == 1) ? PieceColor.Blue : PieceColor.Red;
         
@@ -169,44 +200,30 @@ static class Program
         Console.WriteLine($"======================== PLAYER {player.Id} ========================");
         Console.WriteLine($"NICKNAME: {player.Name.ToUpper()}");
         Console.WriteLine($"PIECE COLOR: {color.ToString().ToUpper()}");
-        Console.WriteLine($"PIECE REMAINING: {remainingPieces} Pieces");
+        Console.WriteLine($"PIECE REMAINING: {remainingPieces:D2} Pieces");
         Console.WriteLine("==========================================================");
         Console.ResetColor();
     }
-    static void PrintBoard(GameController checkers, Piece? selectedPiece, bool firstMove)
+    static void ShowBoard(GameController checkers, List<Position> validMovePositions)
     {
         Piece?[,] board = checkers.GetBoardLayout();
-        
+
         for (int i = 0; i < board.GetLength(0); i++)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine(GeneraterRowSeparator(checkers.GetBoardSize()));
-            Console.Write($"{board.GetLength(0) - i:D2}");
+            Console.WriteLine(GenerateRowSeparator(checkers.GetBoardSize()));
+            Console.Write($"{board.GetLength(0) - i :D2}");
             Console.ResetColor();
             
             for (int j = 0; j < board.GetLength(1); j++)
             {
-                string symbol = "   ";
-                if (board[i, j] != null)
+                Piece? piece = checkers.GetPiece(i, j);
+                string symbol = (piece == null) ? "   " : GetOccupiedCellSymbol(piece);
+                
+                if (validMovePositions.Any(position => position.Row == i && position.Column == j))
                 {
-                    Piece piece = board[i, j]!;
-                    string type = (piece.Status == PieceStatus.King) ? "K" : "R";
-                    symbol = $"{type}{piece.Id:D2}";
-                    Console.ForegroundColor = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
-                }
-                else
-                {
-                    if (selectedPiece != null)
-                    {
-                        IEnumerable<Position> validMovePositions = checkers.GetPossibleMoves(selectedPiece, firstMove);
-                        foreach (var position in validMovePositions)
-                        {
-                            if (position.Row != i || position.Column != j)
-                                continue;
-                            Console.ForegroundColor = ConsoleColor.Yellow;
-                            symbol = $" X ";
-                        }
-                    }
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    symbol = $" X ";
                 }
                 
                 Console.Write($"| {symbol} |");
@@ -215,9 +232,15 @@ static class Program
             Console.WriteLine();
         }
         Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine(GeneraterRowSeparator(checkers.GetBoardSize()));
+        Console.WriteLine(GenerateRowSeparator(checkers.GetBoardSize()));
         Console.WriteLine(GenerateRankName(checkers.GetBoardSize()));
         Console.ResetColor();
+    }
+    static string GetOccupiedCellSymbol(Piece piece)
+    {
+        string type = (piece.Status == PieceStatus.King) ? "K" : "R";
+        Console.ForegroundColor = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
+        return $"{type}{piece.Id:D2}";
     }
     static void ShowSelectedPiece(Piece selectedPiece)
     {
@@ -225,7 +248,7 @@ static class Program
         Console.WriteLine("PIECE SELECTED: {0}-{1}", selectedPiece.Status, selectedPiece.Id);
         Console.ResetColor();
     }
-    static void PrintWinner(GameController checkers)
+    static void ShowTheWinner(GameController checkers)
     {
         Console.ReadLine();
         
@@ -240,99 +263,96 @@ static class Program
             Console.WriteLine($"Congratulations {winner.Name}, you have won!");
             Console.ResetColor();
         }
-        
     }
-    static string GeneraterRowSeparator(int size)
+    static string GenerateRowSeparator(int size)
     {
-        StringBuilder sb = new();
-        
-        sb.Append("--");
-        for (int i = 0; i < size; i++)
-        {
-            sb.Append("-------");
-        }
-        
-        return sb.ToString();
+        string dashSegment = new string('-', 7); // "-------"
+        string separator = string.Join("", Enumerable.Repeat(dashSegment, size));
+        return "--" + separator;
     }
     static string GenerateRankName(int size)
     {
-        StringBuilder sb = new();
-        
-        sb.Append("  ");
-        for (int i = 0; i < size; i++)
-        {
-            sb.Append($"   {(RankName)i}   ");
-        }
-
-        return sb.ToString();
+        return "  " + string.Join("   ", Enumerable.Range(0, size).Select(i => $"   {(RankName)i}")) + "   ";
     }
-    
     #endregion
     
     #region Event Handler
     private static void HandlePlayerAdded(IPlayer player)
     {
-        ConsolePrint($"🤴 New Player Added: {player.Name}\n");
+        Console.WriteLine("🤴 New Player Added: {0}", player);
     }
     private static void HandlePieceMoved(Piece piece, Position position)
     {
-        ConsoleColor color = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
-        ConsolePrint($"Piece {piece.Id} moved to: {position}/n", color);
+        Console.ForegroundColor = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
+        Console.WriteLine("Piece {0} moved to: {1}", piece, position);
+        Console.ResetColor();
     }
     private static void HandlePieceCaptured(Piece piece)
     {
-        ConsoleColor color = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
-        ConsolePrint($"Piece {piece.Id} have been captured/n", color);
+        Console.ForegroundColor = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
+        Console.WriteLine("Piece {0} has been captured", piece);
+        Console.ResetColor();
     }
     private static void HandlePiecePromoted(Piece piece)
     {
-        ConsoleColor color = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
-        ConsolePrint($"Piece {piece.Id} have been Promoted to {PieceStatus.King.ToString()}/n", color);
+        Console.ForegroundColor = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
+        Console.WriteLine("Piece has been promoted: {0}", piece);
+        Console.ResetColor();
+    }
+    private static void HandleCurrentPlayerChanged(IPlayer player)
+    {
+        Console.WriteLine("Next player is: {0}", player);
+    }
+    private static void HandleGameStatusChanged(GameStatus status)
+    {
+        switch (status)
+        {
+            case GameStatus.Ready:
+                Console.WriteLine("Game is ready. Waiting for the first move..");
+                break;
+            case GameStatus.GameOver:
+                Console.WriteLine("GAME OVER!!");
+                break;
+        }
     }
     #endregion
 
     #region Setup Game
     public static void SetupDisplay(GameController checkers)
     {
-        int displayLevel = 0;
+        MenuLevel level = MenuLevel.MainMenu;
         while (true)
         {
-            switch (displayLevel)
+            switch (level)
             {
-                case 0:
-                    MainMenu(out displayLevel);
+                case MenuLevel.MainMenu:
+                    MainMenu(checkers, out level);
                     break;
-                case 1:
-                    AddBoard(checkers, out displayLevel);
+                case MenuLevel.AddBoard:
+                    AddBoard(checkers, out level);
                     break;
-                case 2:
-                    AddPlayer(checkers, out displayLevel);
+                case MenuLevel.AddPlayer:
+                    AddPlayer(checkers, out level);
                     break;
-                case 3:
-                    AddPiece(checkers, out displayLevel);
+                case MenuLevel.AddPiece:
+                    AddPiece(checkers, out level);
                     break;
-                case 4:
-                    FinalizeSetup(checkers, out displayLevel);
+                case MenuLevel.Finalize:
+                    FinalizeSetup(checkers, out level);
                     break;
-                case 6:
-                    ResetSetup(checkers, out displayLevel);
-                    break;
-                case 7:
+                case MenuLevel.Exit:
                     Console.Clear();
                     return;
             }   
         }
     }
-    private static void MainMenu(out int displayLevel)
+    private static void MainMenu(GameController checkers, out MenuLevel level)
     {
         Console.Clear();
         Console.CursorVisible = false;
         Console.OutputEncoding = Encoding.UTF8;
-        
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine("Welcome to Checkers Game");
-        Console.ResetColor();
-        Console.WriteLine("\nCheckers Game Main Menu \u001b[36m(Use ⬆️ and ⬇️ key to navigate, and ENTER key to select)\u001b[0m:");
+        Console.WriteLine("\u001B[32mWelcome to Checkers Game\u001b[0m\n");
+        Console.WriteLine("Main Menu \u001b[36m(Use ⬆️ and ⬇️ key to navigate, and ENTER key to select)\u001b[0m:");
         
         var menuOptions = new[]
         {
@@ -343,23 +363,21 @@ static class Program
         int selectedOption = SelectionMenu(menuOptions);
         if (selectedOption == 0)
         {
-            displayLevel = 1;
+            level = MenuLevel.AddBoard;
+            ResetSetup(checkers);
         }
         else
         {
-            displayLevel = 0;
+            level = MenuLevel.MainMenu;
             Environment.Exit(0);
         }
     }
-    private static void AddBoard(GameController checkers, out int displayLevel)
+    private static void AddBoard(GameController checkers, out MenuLevel level)
     {
         Console.Clear();
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine("Board Setup");
-        Console.ResetColor();
-        Console.WriteLine();
-        
+        Console.WriteLine("\u001B[32mBoard Setup\u001B[0m\n");
         Console.WriteLine("\u001b[36mSelect The Board Size:\u001b[0m");
+        
         int[] menuOptions = new[]
         {
             8,
@@ -369,17 +387,14 @@ static class Program
 
         int selectedOption = SelectionMenu(menuOptions);
         checkers.SetBoard(new CheckersBoard<Piece>(menuOptions[selectedOption]));
-        
-        displayLevel = 2;
+
+        level = MenuLevel.AddPlayer;
     }
-    private static void AddPlayer(GameController checkers, out int displayLevel)
+    private static void AddPlayer(GameController checkers, out MenuLevel level)
     {
         Console.Clear();
         Console.CursorVisible = true;
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine("Add Two Players");
-        Console.ResetColor();
-        Console.WriteLine();
+        Console.WriteLine("\u001B[32mAdd Two Players\u001B[0m\n");
         
         int maxPlayer = 2;
         for (int i = 0; i < maxPlayer; i++)
@@ -392,47 +407,46 @@ static class Program
             Console.WriteLine();
         }
             
-        displayLevel = 3;
+        level = MenuLevel.AddPiece;
     }
-    private static void AddPiece(GameController checkers, out int displayLevel)
+    private static void AddPiece(GameController checkers, out MenuLevel level)
     {
-        foreach (var player in checkers.GetActivePlayer())
+        Parallel.ForEach(checkers.GetActivePlayer(), player =>
         {
             PieceColor color = (player.Id == 1) ? PieceColor.Blue : PieceColor.Red;
             int pieceQty = checkers.MaxPlayerPieces();
-            
-            checkers.SetPlayerPieces(player, checkers.GeneratePieces(color, pieceQty).ToList());
-        }
+            checkers.SetPlayerPieces(player, checkers.GeneratePieces(color, pieceQty).ToHashSet());
+        });
         
         checkers.SetPieceToBoard();
         
-        displayLevel = 4;
+        level = MenuLevel.Finalize;
     }
-    private static void FinalizeSetup(GameController checkers, out int displayLevel)
+    private static void FinalizeSetup(GameController checkers, out MenuLevel level)
     {
         Console.Clear();
-        ConsolePrint("Finalize Setup\n\n", ConsoleColor.Green);
-        ConsolePrint($"Board Size: {checkers.GetBoardSize()}\n");
+        Console.WriteLine("\u001B[32mFinalize Setup\u001B[0m\n");
+        Console.WriteLine("Board Size: {0}", checkers.GetBoardSize());
 
         foreach (var player in checkers.GetActivePlayer())
         {
-            ConsolePrint($"Player {player.Id}: {player.Name}\n");
+            Console.WriteLine("Player: {0}", player);
         }
         
-        ConsolePrint("\nPlay Checkers?\n", ConsoleColor.Cyan);
-        string[] menuOptions = new[]
+        Console.WriteLine("\n\u001B[36mPlay Checkers?\u001B[0m");
+        
+        var menuOptions = new[]
         {
             "Yes",
             "No"
         };
 
         int selectedOption = SelectionMenu(menuOptions);
-        displayLevel = (selectedOption == 0) ? 7 : 6;
+        level = (selectedOption == 0) ? MenuLevel.Exit : MenuLevel.MainMenu;
     }
-    private static void ResetSetup(GameController checkers, out int displayLevel)
+    private static void ResetSetup(GameController checkers)
     {
         checkers.RemoveAllPlayers();
-        displayLevel = 0;
     }
     private static int SelectionMenu<T> (T[] menuOptions)
     {
