@@ -24,7 +24,7 @@ public class Piece
     }
     public override int GetHashCode()
     {
-        return HashCode.Combine(Id, (int)Color);
+        return Id;
     }
 
     public override string ToString()

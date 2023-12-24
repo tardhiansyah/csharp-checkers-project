@@ -626,8 +626,7 @@ public class GameController
             return Enumerable.Empty<Position>();
         }
         
-        List<Position> possibleMoves = new List<Position>();
-
+        HashSet<Position> possibleMoves = new HashSet<Position>();
         Position? piecePos = GetPosition(piece);
         if (piecePos == null)
         {
@@ -1100,11 +1099,11 @@ public class GameController
             return false;
         }
         
-        int currentIndex = _players.Keys.ToList().IndexOf(_currentPlayer);
+        int currentIndex = GetActivePlayer().ToList().IndexOf(_currentPlayer);
         
-        int nextIndex = (currentIndex + 1) % _players.Count;
+        int nextIndex = (currentIndex + 1) % GetPlayers().Count;
         
-        IPlayer nextPlayer = _players.Keys.ElementAt(nextIndex);
+        IPlayer nextPlayer = GetActivePlayer().ElementAt(nextIndex);
         
         _logger?.LogInformation("Attempt to advances game turn is success");
         return SetCurrentPlayer(nextPlayer);

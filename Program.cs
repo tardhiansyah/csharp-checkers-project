@@ -41,7 +41,7 @@ public static class Program
         services.AddLogging(builder =>
         {
             builder.ClearProviders();
-            builder.SetMinimumLevel(LogLevel.Information);
+            builder.SetMinimumLevel(LogLevel.Warning);
             builder.AddNLog("nlog.config");
         });
         services.AddTransient<GameController>();
@@ -58,7 +58,7 @@ public static class Program
     static void PlayGame(GameController checkers)
     {
         Piece? selectedPiece = null;
-        List<Position> validMovePositions = new List<Position>();
+        HashSet<Position> validMovePositions = new HashSet<Position>();
         int currentNPiece = checkers.CountPieceOnBoard();
         int lastNPiece = currentNPiece;
         bool firstMove = true;
@@ -79,7 +79,7 @@ public static class Program
                 ShowPlayerInformation(currentPlayer, remainingPlayerPieces);
                 
                 selectedPiece = SelectPiece(checkers);
-                validMovePositions = checkers.GetPossibleMoves(selectedPiece, firstMove).ToList();
+                validMovePositions = (HashSet<Position>) checkers.GetPossibleMoves(selectedPiece, firstMove);
             }
             
             while (validMovePositions.Count != 0)
@@ -100,7 +100,7 @@ public static class Program
                 currentNPiece = checkers.CountPieceOnBoard();
                 if (currentNPiece != lastNPiece)
                 {
-                    validMovePositions = checkers.GetPossibleMoves(selectedPiece, firstMove).ToList();
+                    validMovePositions = (HashSet<Position>) checkers.GetPossibleMoves(selectedPiece, firstMove);
                     lastNPiece = currentNPiece;
                     continue;
                 }
@@ -207,7 +207,7 @@ public static class Program
         Console.WriteLine("==========================================================");
         Console.ResetColor();
     }
-    static void ShowBoard(GameController checkers, List<Position> validMovePositions)
+    static void ShowBoard(GameController checkers, HashSet<Position> validMovePositions)
     {
         Piece?[,] board = checkers.GetBoardLayout();
 
@@ -253,8 +253,6 @@ public static class Program
     }
     static void ShowTheWinner(GameController checkers)
     {
-        Console.ReadLine();
-        
         IPlayer? winner = checkers.GetWinner();
         if (winner == null)
         {
