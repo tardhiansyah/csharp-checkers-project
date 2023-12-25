@@ -177,14 +177,12 @@ public static class Program
     }
     static Position? ConvertInputToPosition(string inputPosition, in int boardSize)
     {
-        string pattern = @"([A-Z]+)(\d+)";
-        Match match = Regex.Match(inputPosition, pattern);
+        Match match = Regex.Match(inputPosition,  @"([A-Z]+)(\d+)");
 
         if (!match.Success)
             return null;
-
-        string letterPart = match.Groups[1].Value;
-        if (!Enum.TryParse(letterPart, out RankName rank))
+        
+        if (!Enum.TryParse(match.Groups[1].Value, out RankName rank))
             return null;
 
         int column = (int)rank;
@@ -200,10 +198,10 @@ public static class Program
         PieceColor color = (player.Id == 1) ? PieceColor.Blue : PieceColor.Red;
         
         Console.ForegroundColor = (player.Id == 1) ? ConsoleColor.Blue : ConsoleColor.Red;
-        Console.WriteLine($"======================== PLAYER {player.Id} ========================");
-        Console.WriteLine($"NICKNAME: {player.Name.ToUpper()}");
-        Console.WriteLine($"PIECE COLOR: {color.ToString().ToUpper()}");
-        Console.WriteLine($"PIECE REMAINING: {remainingPieces:D2} Pieces");
+        Console.WriteLine("======================== PLAYER {0} ========================", player.Id.ToString());
+        Console.WriteLine("NICKNAME: {0}", player.Name.ToUpper());
+        Console.WriteLine("PIECE COLOR: {0}", color.ToString().ToUpper());
+        Console.WriteLine("PIECE REMAINING: {0:D2} Pieces", (remainingPieces));
         Console.WriteLine("==========================================================");
         Console.ResetColor();
     }
@@ -215,7 +213,7 @@ public static class Program
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine(GenerateRowSeparator(checkers.GetBoardSize()));
-            Console.Write($"{board.GetLength(0) - i :D2}");
+            Console.Write("{0:D2}", board.GetLength(0) - i);
             Console.ResetColor();
             
             for (int j = 0; j < board.GetLength(1); j++)
@@ -226,10 +224,10 @@ public static class Program
                 if (validMovePositions.Any(position => position.Row == i && position.Column == j))
                 {
                     Console.ForegroundColor = ConsoleColor.Yellow;
-                    symbol = $" X ";
+                    symbol = " X ";
                 }
                 
-                Console.Write($"| {symbol} |");
+                Console.Write("| {0} |", symbol);
                 Console.ResetColor();
             }
             Console.WriteLine();
@@ -241,14 +239,14 @@ public static class Program
     }
     static string GetOccupiedCellSymbol(Piece piece)
     {
-        string type = (piece.Status == PieceStatus.King) ? "K" : "R";
+        char type = (piece.Status == PieceStatus.King) ? 'K' : 'R';
         Console.ForegroundColor = (piece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
         return $"{type}{piece.Id:D2}";
     }
     static void ShowSelectedPiece(Piece selectedPiece)
     {
         Console.ForegroundColor = (selectedPiece.Color == PieceColor.Blue) ? ConsoleColor.Blue : ConsoleColor.Red;
-        Console.WriteLine("PIECE SELECTED: {0}-{1}", selectedPiece.Status, selectedPiece.Id);
+        Console.WriteLine("PIECE SELECTED: {0}-{1}", selectedPiece.Status, selectedPiece.Id.ToString());
         Console.ResetColor();
     }
     static void ShowTheWinner(GameController checkers)
@@ -261,7 +259,7 @@ public static class Program
         else
         {
             Console.ForegroundColor = (winner.Id == 1) ? ConsoleColor.Blue : ConsoleColor.Red; 
-            Console.WriteLine($"Congratulations {winner.Name}, you have won!");
+            Console.WriteLine("Congratulations {0}, you have won!", winner.Name);
             Console.ResetColor();
         }
     }
@@ -401,7 +399,7 @@ public static class Program
         for (int i = 0; i < maxPlayer; i++)
         {
             int playerId = i + 1;
-            Console.WriteLine($"PLAYER {playerId}");
+            Console.WriteLine("PLAYER {0}", playerId);
             string name = GetUserInput("Enter username: ");
             Player player = new Player(playerId, name);
             checkers.AddPlayer(player);
