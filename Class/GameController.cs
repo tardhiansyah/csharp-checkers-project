@@ -633,7 +633,8 @@ public class GameController
             _logger?.LogWarning("Attempt to obtained piece {Piece}'s possible moves failed", piece);
             return Enumerable.Empty<Position>();
         }
-        
+
+        bool isAnyJumpMoves = false;
         for (int row = -1; row <= 1; row++)
         {
             for (int column = -1; column <= 1; column++)
@@ -663,7 +664,7 @@ public class GameController
                 Piece? enemyPiece = GetPiece(targetRow, targetColumn);
                 if (enemyPiece == null)
                 {
-                    if (!firstMove)
+                    if (!firstMove || isAnyJumpMoves)
                     {
                         continue;
                     }
@@ -679,6 +680,13 @@ public class GameController
                     {
                         continue;
                     }
+
+                    if (!isAnyJumpMoves)
+                    {
+                        possibleMoves.Clear();
+                        isAnyJumpMoves = true;
+                    }
+                    
                     
                     _logger?.LogInformation("Adding piece {Piece}'s possible move: (Row,Column) ({Row},{Column})", piece, jumpRow, jumpColumn);
                     possibleMoves.Add(new Position(jumpRow, jumpColumn));
