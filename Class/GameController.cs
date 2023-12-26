@@ -635,6 +635,7 @@ public class GameController
         }
 
         bool isAnyJumpMoves = false;
+        
         for (int row = -1; row <= 1; row++)
         {
             for (int column = -1; column <= 1; column++)
@@ -686,7 +687,6 @@ public class GameController
                         possibleMoves.Clear();
                         isAnyJumpMoves = true;
                     }
-                    
                     
                     _logger?.LogInformation("Adding piece {Piece}'s possible move: (Row,Column) ({Row},{Column})", piece, jumpRow, jumpColumn);
                     possibleMoves.Add(new Position(jumpRow, jumpColumn));
@@ -912,7 +912,7 @@ public class GameController
             return false;
         }
         
-        if (!CanPromotePiece(piece, position))
+        if (!OnEndRow(piece, position))
         {
             _logger?.LogWarning("Attempt to promote Piece {Piece} failed", piece);
             return false;
@@ -936,7 +936,7 @@ public class GameController
     /// <returns>
     /// True if the piece can be promoted; otherwise, false.
     /// </returns>
-    private bool CanPromotePiece(Piece piece, Position position)
+    private bool OnEndRow(Piece piece, Position position)
     {
         int endRow = (piece.Color == PieceColor.Blue) ? (GetBoardSize() - 1) : 0;
         if (position.Row != endRow)
@@ -1013,7 +1013,7 @@ public class GameController
     /// <returns>
     /// True if the game status is successfully set; otherwise, false.
     /// </returns>
-    private bool SetGameStatus(GameStatus status)
+    public bool SetGameStatus(GameStatus status)
     {
         if (status == _status)
         {

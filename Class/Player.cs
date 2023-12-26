@@ -4,13 +4,13 @@ namespace CheckersGame.Class;
 
 public class Player : IPlayer
 {
-    public string Name { get; }
+    public string NickName { get; }
     public int Id { get; }
 
-    public Player(int id, string name)
+    public Player(int id, string nickName)
     {
         Id = id;
-        Name = name;
+        NickName = nickName;
     }
     public override bool Equals(object? obj)
     {
@@ -27,6 +27,6 @@ public class Player : IPlayer
 
     public override string ToString()
     {
-        return $"{Name} ({Id})";
+        return $"{NickName} ({Id})";
     }
 }

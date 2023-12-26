@@ -8,9 +8,9 @@ public class Piece
     public PieceColor Color { get; }
     public PieceStatus Status { get; set; }
 
-    public Piece(int id, PieceColor color)
+    public Piece(int id, PieceColor color, PieceStatus status = PieceStatus.Regular)
     {
-        Status = PieceStatus.Regular;
+        Status = status;
         Color = color;
         Id = id;
     }

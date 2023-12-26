@@ -2,6 +2,6 @@
 
 public interface IPlayer
 {
-    public string Name { get; }
+    public string NickName { get; }
     public int Id { get; }
 }

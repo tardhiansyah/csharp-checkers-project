@@ -199,7 +199,7 @@ public static class Program
         
         Console.ForegroundColor = (player.Id == 1) ? ConsoleColor.Blue : ConsoleColor.Red;
         Console.WriteLine("======================== PLAYER {0} ========================", player.Id.ToString());
-        Console.WriteLine("NICKNAME: {0}", player.Name.ToUpper());
+        Console.WriteLine("NICKNAME: {0}", player.NickName.ToUpper());
         Console.WriteLine("PIECE COLOR: {0}", color.ToString().ToUpper());
         Console.WriteLine("PIECE REMAINING: {0:D2} Pieces", (remainingPieces));
         Console.WriteLine("==========================================================");
@@ -259,13 +259,13 @@ public static class Program
         else
         {
             Console.ForegroundColor = (winner.Id == 1) ? ConsoleColor.Blue : ConsoleColor.Red; 
-            Console.WriteLine("Congratulations {0}, you have won!", winner.Name);
+            Console.WriteLine("Congratulations {0}, you have won!", winner.NickName);
             Console.ResetColor();
         }
     }
     static string GenerateRowSeparator(int size)
     {
-        string dashSegment = new string('-', 7); // "-------"
+        string dashSegment = new string('-', 7);
         string separator = string.Join("", Enumerable.Repeat(dashSegment, size));
         return "--" + separator;
     }
