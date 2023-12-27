@@ -1,4 +1,5 @@
 using CheckersGame.Class;
+using CheckersGame.Enumeration;
 using CheckersGame.Interface;
 
 namespace CheckersGame.Test;
@@ -66,5 +67,21 @@ public class GameControllerTest
         
         //Assert
         Assert.That(_gameController.GetPlayers(), Is.EqualTo(players));
+    }
+    
+    [TestCase(PieceColor.Red, 4, PieceColor.Red, 4)]
+    [TestCase(PieceColor.Blue, 4, PieceColor.Blue, 4)]
+    public void GeneratePieces_ShouldCorrectColorAndQuantity_TestCase(PieceColor color, int quantity,
+        PieceColor expectedColor, int expectedQuantity)
+    {
+        //Arrange
+        
+        //Act
+        List<Piece> pieces = _gameController.GeneratePieces(color, quantity).ToList();
+        
+        //Assert
+        Assert.That(pieces.Count, Is.EqualTo(expectedQuantity));
+        Assert.That(pieces.First().Color, Is.EqualTo(expectedColor));
+        Assert.That(pieces.Last().Color, Is.EqualTo(expectedColor));
     }
 }
