@@ -1,4 +1,3 @@
-### UI
 # Feature
 - [x] Main Menu
 - [x] Possible Move Suggestion
